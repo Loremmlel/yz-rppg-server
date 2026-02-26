@@ -8,7 +8,7 @@ import youzi.lin.server.enums.BedStatus;
 public class Bed {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Long bedId;
     /**
      * 病区代码，如“内科一区”
      */

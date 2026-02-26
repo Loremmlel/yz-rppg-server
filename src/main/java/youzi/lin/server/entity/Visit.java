@@ -12,10 +12,10 @@ public class Visit {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne
-    @JoinColumn(name = "id")
+    @JoinColumn(name = "patient_id")
     private Patient patient;
     @ManyToOne
-    @JoinColumn(name = "id")
+    @JoinColumn(name = "bed_id")
     private Bed bed;
     private LocalDateTime admissionTime;
     private LocalDateTime dischargeTime;
