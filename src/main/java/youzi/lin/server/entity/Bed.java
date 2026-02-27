@@ -27,4 +27,22 @@ public class Bed {
     private String deviceSn;
     @Enumerated(EnumType.STRING)
     private BedStatus status;
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public String getWardCode() { return wardCode; }
+    public void setWardCode(String wardCode) { this.wardCode = wardCode; }
+
+    public String getRoomNo() { return roomNo; }
+    public void setRoomNo(String roomNo) { this.roomNo = roomNo; }
+
+    public String getBedNo() { return bedNo; }
+    public void setBedNo(String bedNo) { this.bedNo = bedNo; }
+
+    public String getDeviceSn() { return deviceSn; }
+    public void setDeviceSn(String deviceSn) { this.deviceSn = deviceSn; }
+
+    public BedStatus getStatus() { return status; }
+    public void setStatus(BedStatus status) { this.status = status; }
 }
