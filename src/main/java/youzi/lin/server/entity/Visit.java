@@ -19,5 +19,6 @@ public class Visit {
     private Bed bed;
     private LocalDateTime admissionTime;
     private LocalDateTime dischargeTime;
+    @Enumerated(EnumType.STRING)
     private VisitStatus status;
 }

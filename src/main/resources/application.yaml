@@ -14,10 +14,16 @@ spring:
       max-lifetime: 600000
       idle-timeout: 300000
       pool-name: YouziHikariPool
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:init-data.sql
+      encoding: UTF-8
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: true
     properties:
       hibernate:
         format_sql: true
+    defer-datasource-initialization: true

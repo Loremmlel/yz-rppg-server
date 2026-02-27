@@ -8,7 +8,7 @@ import youzi.lin.server.enums.BedStatus;
 public class Bed {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long bedId;
+    private Long id;
     /**
      * 病区代码，如“内科一区”
      */
@@ -25,5 +25,6 @@ public class Bed {
      * 绑定的设备序列号
      */
     private String deviceSn;
+    @Enumerated(EnumType.STRING)
     private BedStatus status;
 }
