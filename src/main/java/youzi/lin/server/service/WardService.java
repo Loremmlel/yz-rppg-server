@@ -59,24 +59,18 @@ public class WardService {
      * 将 Bed 实体转换为 BedDetailDto，如果床位被占用则查询并填充当前患者信息
      */
     private BedDetailDto toBedDetailDto(Bed bed) {
-        var dto = new BedDetailDto();
-        dto.setId(bed.getId());
-        dto.setBedNo(bed.getBedNo());
-        dto.setDeviceSn(bed.getDeviceSn());
-        dto.setStatus(bed.getStatus().name());
-
-        // 查询当前在住的 visit 记录
         var activeVisit = visitRepository.findByBedIdAndStatus(bed.getId(), VisitStatus.VISITED);
-        activeVisit.ifPresent(visit -> {
+        var patientDto = activeVisit.map(visit -> {
             var patient = visit.getPatient();
-            dto.setCurrentPatient(new PatientBriefDto(
-                    patient.getId(),
-                    patient.getName(),
-                    patient.getGender().name()
-            ));
-        });
+            return new PatientBriefDto(patient.getId(), patient.getName(), patient.getGender().name());
+        }).orElse(null);
 
-        return dto;
+        return new BedDetailDto(
+                bed.getId(),
+                bed.getBedNo(),
+                bed.getDeviceSn(),
+                bed.getStatus().name(),
+                patientDto
+        );
     }
 }
-
