@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import youzi.lin.server.dto.BedDetailDto;
 import youzi.lin.server.dto.PatientBriefDto;
 import youzi.lin.server.dto.RoomDto;
+import youzi.lin.server.dto.WardBriefDto;
 import youzi.lin.server.dto.WardDto;
 import youzi.lin.server.entity.Bed;
 import youzi.lin.server.entity.Visit;
@@ -23,6 +24,15 @@ public class WardService {
     public WardService(BedRepository bedRepository, VisitRepository visitRepository) {
         this.bedRepository = bedRepository;
         this.visitRepository = visitRepository;
+    }
+
+    /**
+     * 获取所有病区代码列表（不含病房和床位详情，用于客户端选择病区）
+     */
+    public List<WardBriefDto> getWardList() {
+        return bedRepository.findDistinctWardCodes().stream()
+                .map(WardBriefDto::new)
+                .toList();
     }
 
     /**
