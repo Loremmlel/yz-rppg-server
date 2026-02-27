@@ -1,5 +1,6 @@
 package youzi.lin.server.websocket;
 
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.BinaryMessage;
@@ -31,7 +32,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) {
+    public void afterConnectionEstablished(@NonNull WebSocketSession session) {
         sessionManager.register(session);
         log.info("[WebSocket] 客户端已连接：{}，远程地址：{}", session.getId(),
                 session.getRemoteAddress());
@@ -44,7 +45,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+    public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) {
         String sessionId = session.getId();
         sessionManager.remove(sessionId);
         frameBufferService.removeSession(sessionId);
