@@ -36,7 +36,7 @@ public class FrameBufferService {
      * 解析二进制帧并加入缓冲区。
      *
      * @param sessionId WebSocket 会话 ID
-     * @param payload   原始二进制数据：[8 字节大端时间戳] + [JPEG]
+     * @param payload   原始二进制数据：[8 字节大端时间戳] + [编码图像数据]
      */
     public void addFrame(String sessionId, byte[] payload) {
         if (payload.length <= TIMESTAMP_BYTES) {
@@ -49,11 +49,11 @@ public class FrameBufferService {
                 .order(ByteOrder.BIG_ENDIAN)
                 .getLong();
 
-        // 提取 JPEG 数据
-        var jpeg = new byte[payload.length - TIMESTAMP_BYTES];
-        System.arraycopy(payload, TIMESTAMP_BYTES, jpeg, 0, jpeg.length);
+        // 提取图像数据（JPEG / WebP 等，透传不解码）
+        var imageData = new byte[payload.length - TIMESTAMP_BYTES];
+        System.arraycopy(payload, TIMESTAMP_BYTES, imageData, 0, imageData.length);
 
-        var frame = new VideoFrameData(timestampMs, jpeg);
+        var frame = new VideoFrameData(timestampMs, imageData);
 
         // 使用 computeIfAbsent 保证 per-session list 的创建是原子的
         var sessionBuffer = buffers.computeIfAbsent(sessionId, _ -> new ArrayList<>(BATCH_SIZE));

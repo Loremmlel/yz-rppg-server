@@ -8,7 +8,7 @@ option java_outer_classname = "FrameAnalysisProto";
 
 message Frame {
   int64 timestamp_ms = 1;
-  bytes jpeg = 2;
+  bytes image_data = 2;
 }
 
 message FrameBatchRequest {

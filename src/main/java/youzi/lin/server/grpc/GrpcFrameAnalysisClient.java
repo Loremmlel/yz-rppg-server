@@ -46,7 +46,7 @@ public class GrpcFrameAnalysisClient {
             requestBuilder.addFrames(
                     Frame.newBuilder()
                             .setTimestampMs(frame.timestampMs())
-                            .setJpeg(ByteString.copyFrom(frame.jpeg()))
+                            .setImageData(ByteString.copyFrom(frame.imageData()))
                             .build()
             );
         }
@@ -58,6 +58,7 @@ public class GrpcFrameAnalysisClient {
             public void onNext(FrameBatchResponse response) {
                 var payload = response.getPayload().toByteArray();
                 log.info("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
+                log.info("[gRPC] 会话 {} 分析结果内容: {}", sessionId, response.getPayload().toStringUtf8());
 
                 boolean sent = sessionManager.sendBinaryMessage(sessionId, payload);
                 if (!sent) {
