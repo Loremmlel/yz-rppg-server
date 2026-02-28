@@ -40,7 +40,8 @@ public class GrpcFrameAnalysisClient {
      * @param frames    本批次的帧数据（通常 30 帧）
      */
     public void analyzeFramesAsync(String sessionId, List<VideoFrameData> frames) {
-        var requestBuilder = FrameBatchRequest.newBuilder().setSessionId(sessionId);
+        var requestBuilder = FrameBatchRequest.newBuilder()
+                .setSessionId(sessionId);
 
         for (var frame : frames) {
             requestBuilder.addFrames(
