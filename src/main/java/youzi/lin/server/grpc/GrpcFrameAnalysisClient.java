@@ -69,14 +69,9 @@ public class GrpcFrameAnalysisClient {
                     var root = objectMapper.readTree(payload);
                     var hrNode = root.get("hr");
                     var sqiNode = root.hasNonNull("SQI") ? root.get("SQI") : root.get("sqi");
-                    if (hrNode == null || hrNode.isNull() || sqiNode == null || sqiNode.isNull()) {
-                        log.warn("[gRPC] 会话 {} 分析结果缺少 hr/SQI，忽略该结果", sessionId);
-                        return;
-                    }
-
                     ObjectNode output = objectMapper.createObjectNode();
-                    output.put("heartRate", hrNode.asDouble());
-                    output.put("sqi", sqiNode.asDouble());
+                    output.put("hr", hrNode == null || hrNode.isNull() ? null : hrNode.asDouble());
+                    output.put("sqi", sqiNode == null || sqiNode.isNull() ? null : sqiNode.asDouble());
                     jsonOutput = objectMapper.writeValueAsString(output);
                 } catch (Exception e) {
                     log.error("[gRPC] 会话 {} 解析分析结果失败: {}", sessionId, e.getMessage(), e);
