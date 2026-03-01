@@ -1,5 +1,7 @@
 package youzi.lin.server.grpc;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,10 +27,12 @@ public class GrpcFrameAnalysisClient {
 
     private final FrameAnalysisServiceGrpc.FrameAnalysisServiceStub asyncStub;
     private final WebSocketSessionManager sessionManager;
+    private final ObjectMapper objectMapper;
 
     public GrpcFrameAnalysisClient(GrpcChannelFactory channelFactory,
                                    WebSocketSessionManager sessionManager) {
         this.sessionManager = sessionManager;
+        this.objectMapper = new ObjectMapper();
         ManagedChannel channel = channelFactory.createChannel("frame-analysis");
         this.asyncStub = FrameAnalysisServiceGrpc.newStub(channel);
     }
@@ -59,9 +63,27 @@ public class GrpcFrameAnalysisClient {
             public void onNext(FrameBatchResponse response) {
                 var payload = response.getPayload().toByteArray();
                 log.info("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
-                log.info("[gRPC] 会话 {} 分析结果内容: {}", sessionId, response.getPayload().toStringUtf8());
 
-                boolean sent = sessionManager.sendBinaryMessage(sessionId, payload);
+                String jsonOutput;
+                try {
+                    var root = objectMapper.readTree(payload);
+                    var hrNode = root.get("hr");
+                    var sqiNode = root.hasNonNull("SQI") ? root.get("SQI") : root.get("sqi");
+                    if (hrNode == null || hrNode.isNull() || sqiNode == null || sqiNode.isNull()) {
+                        log.warn("[gRPC] 会话 {} 分析结果缺少 hr/SQI，忽略该结果", sessionId);
+                        return;
+                    }
+
+                    ObjectNode output = objectMapper.createObjectNode();
+                    output.put("heartRate", hrNode.asDouble());
+                    output.put("sqi", sqiNode.asDouble());
+                    jsonOutput = objectMapper.writeValueAsString(output);
+                } catch (Exception e) {
+                    log.error("[gRPC] 会话 {} 解析分析结果失败: {}", sessionId, e.getMessage(), e);
+                    return;
+                }
+
+                boolean sent = sessionManager.sendTextMessage(sessionId, jsonOutput);
                 if (!sent) {
                     log.warn("[gRPC] 会话 {} 已断开，丢弃分析结果", sessionId);
                 }
@@ -79,4 +101,3 @@ public class GrpcFrameAnalysisClient {
         });
     }
 }
-

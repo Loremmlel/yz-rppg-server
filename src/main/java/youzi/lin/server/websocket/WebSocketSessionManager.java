@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.BinaryMessage;
+import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
@@ -90,6 +91,25 @@ public class WebSocketSessionManager {
      */
     public Map<String, Long> allSessionBedMappings() {
         return Map.copyOf(sessionBedMap);
+    }
+
+    /**
+     * 向指定会话发送文本消息。
+     * 对同一 session 的 sendMessage 加锁，避免并发写入导致异常。
+     */
+    public boolean sendTextMessage(String sessionId, String text) {
+        var session = sessions.get(sessionId);
+        if (session == null || !session.isOpen()) {
+            return false;
+        }
+        synchronized (session) {
+            try {
+                session.sendMessage(new TextMessage(text));
+                return true;
+            } catch (IOException e) {
+                return false;
+            }
+        }
     }
 
     /**
