@@ -18,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 维护所有活跃客户端会话，提供注册 / 注销 / 按 ID 发送消息等能力。
  * 同一 session 的写操作需加同步锁（WebSocketSession 本身非线程安全）。
  * <p>
- * 同时维护 sessionId ↔ bedId 的双向映射，供业务层按床位查找会话。
+ * 同时维护 sessionId ↔ bedId 的双向映射，供业务层按床位查找会话；
+ * 以及 sessionId → patientId 的映射，供业务层按患者关联数据。
  */
 @Component
 public class WebSocketSessionManager {
@@ -33,27 +34,38 @@ public class WebSocketSessionManager {
     /** bedId → sessionId（同一床位同时仅允许一个活跃连接） */
     private final ConcurrentHashMap<Long, String> bedSessionMap = new ConcurrentHashMap<>();
 
+    /** sessionId → patientId（当前在床患者，可能为 null） */
+    private final ConcurrentHashMap<String, Long> sessionPatientMap = new ConcurrentHashMap<>();
+
     /**
-     * 注册会话并绑定床位 ID。
+     * 注册会话并绑定床位 ID 和患者 ID。
      *
-     * @param session WebSocket 会话
-     * @param bedId   客户端 query 中携带的床位 ID，可能为 {@code null}（未提供时）
+     * @param session   WebSocket 会话
+     * @param bedId     客户端 query 中携带的床位 ID，可能为 {@code null}（未提供时）
+     * @param patientId 当前床位的在院患者 ID，可能为 {@code null}（床位空置或查询失败时）
      */
-    public void register(WebSocketSession session, Long bedId) {
+    public void register(WebSocketSession session, Long bedId, Long patientId) {
         sessions.put(session.getId(), session);
 
         if (bedId != null) {
             // 若该床位已有旧会话，先清除旧映射
-            String oldSessionId = bedSessionMap.put(bedId, session.getId());
+            var oldSessionId = bedSessionMap.put(bedId, session.getId());
             if (oldSessionId != null && !oldSessionId.equals(session.getId())) {
                 sessionBedMap.remove(oldSessionId);
+                sessionPatientMap.remove(oldSessionId);
                 log.info("[SessionManager] 床位 {} 的旧会话 {} 已被新会话 {} 替代",
                         bedId, oldSessionId, session.getId());
             }
             sessionBedMap.put(session.getId(), bedId);
         }
+
+        if (patientId != null) {
+            sessionPatientMap.put(session.getId(), patientId);
+            log.info("[SessionManager] 会话 {} 绑定患者 ID：{}", session.getId(), patientId);
+        }
     }
 
+    @SuppressWarnings("resource")
     public void remove(String sessionId) {
         sessions.remove(sessionId);
 
@@ -61,6 +73,8 @@ public class WebSocketSessionManager {
         if (bedId != null) {
             bedSessionMap.remove(bedId, sessionId);
         }
+
+        sessionPatientMap.remove(sessionId);
     }
 
     public WebSocketSession get(String sessionId) {
@@ -80,6 +94,15 @@ public class WebSocketSessionManager {
      */
     public Long getBedId(String sessionId) {
         return sessionBedMap.get(sessionId);
+    }
+
+    /**
+     * 获取指定会话绑定的患者 ID。
+     *
+     * @return 患者 ID；若床位空置或未查询到在院患者则返回 {@code null}
+     */
+    public Long getPatientId(String sessionId) {
+        return sessionPatientMap.get(sessionId);
     }
 
     public Collection<WebSocketSession> allSessions() {

@@ -6,6 +6,7 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
+import youzi.lin.server.repository.VisitRepository;
 import youzi.lin.server.service.FrameBufferService;
 import youzi.lin.server.websocket.BinaryFrameWebSocketHandler;
 import youzi.lin.server.websocket.WebSocketSessionManager;
@@ -21,11 +22,14 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final WebSocketSessionManager sessionManager;
     private final FrameBufferService frameBufferService;
+    private final VisitRepository visitRepository;
 
     public WebSocketConfig(WebSocketSessionManager sessionManager,
-                           FrameBufferService frameBufferService) {
+                           FrameBufferService frameBufferService,
+                           VisitRepository visitRepository) {
         this.sessionManager = sessionManager;
         this.frameBufferService = frameBufferService;
+        this.visitRepository = visitRepository;
     }
 
     @Override
@@ -36,7 +40,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Bean
     public BinaryFrameWebSocketHandler binaryFrameWebSocketHandler() {
-        return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService);
+        return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService, visitRepository);
     }
 
     /**
@@ -44,7 +48,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
      */
     @Bean
     public ServletServerContainerFactoryBean createWebSocketContainer() {
-        ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
+        var container = new ServletServerContainerFactoryBean();
         // 最大二进制消息大小：1 MB（单帧 JPEG + 8 字节时间戳绰绰有余）
         container.setMaxBinaryMessageBufferSize(1024 * 1024);
         container.setMaxTextMessageBufferSize(64 * 1024);
