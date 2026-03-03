@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS visit
     id              BIGSERIAL PRIMARY KEY,
     patient_id      BIGINT       NOT NULL REFERENCES patient (id),
     bed_id          BIGINT       NOT NULL REFERENCES bed (id),
-    admission_time  TIMESTAMP,
-    discharge_time  TIMESTAMP,
+    admission_time  TIMESTAMPTZ,
+    discharge_time  TIMESTAMPTZ,
     status          VARCHAR(16)  NOT NULL
 );
 
@@ -65,10 +65,10 @@ VALUES ('内科一区', '101', '1', 'DEV-001', 'OCCUPIED'),
 
 -- visit
 INSERT INTO visit (patient_id, bed_id, admission_time, discharge_time, status)
-VALUES (1, 1, '2026-02-01 08:00:00', NULL,                  'VISITED'),
-       (2, 3, '2026-02-05 09:30:00', NULL,                  'VISITED'),
-       (3, 5, '2026-02-10 10:00:00', NULL,                  'VISITED'),
-       (4, 8, '2026-02-15 14:00:00', NULL,                  'VISITED'),
-       (5, 2, '2026-01-10 08:00:00', '2026-01-20 10:00:00', 'DISCHARGED'),
-       (6, 4, '2026-01-15 09:00:00', '2026-01-25 11:00:00', 'DISCHARGED');
+VALUES (1, 1, '2026-02-01T08:00:00Z', NULL,                  'VISITED'),
+       (2, 3, '2026-02-05T09:30:00Z', NULL,                  'VISITED'),
+       (3, 5, '2026-02-10T10:00:00Z', NULL,                  'VISITED'),
+       (4, 8, '2026-02-15T14:00:00Z', NULL,                  'VISITED'),
+       (5, 2, '2026-01-10T08:00:00Z', '2026-01-20T10:00:00Z', 'DISCHARGED'),
+       (6, 4, '2026-01-15T09:00:00Z', '2026-01-25T11:00:00Z', 'DISCHARGED');
 

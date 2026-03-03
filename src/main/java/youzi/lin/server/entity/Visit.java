@@ -3,7 +3,7 @@ package youzi.lin.server.entity;
 import jakarta.persistence.*;
 import youzi.lin.server.enums.VisitStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "visit")
@@ -17,8 +17,8 @@ public class Visit {
     @ManyToOne
     @JoinColumn(name = "bed_id")
     private Bed bed;
-    private LocalDateTime admissionTime;
-    private LocalDateTime dischargeTime;
+    private Instant admissionTime;
+    private Instant dischargeTime;
     @Enumerated(EnumType.STRING)
     private VisitStatus status;
 
@@ -31,11 +31,11 @@ public class Visit {
     public Bed getBed() { return bed; }
     public void setBed(Bed bed) { this.bed = bed; }
 
-    public LocalDateTime getAdmissionTime() { return admissionTime; }
-    public void setAdmissionTime(LocalDateTime admissionTime) { this.admissionTime = admissionTime; }
+    public Instant getAdmissionTime() { return admissionTime; }
+    public void setAdmissionTime(Instant admissionTime) { this.admissionTime = admissionTime; }
 
-    public LocalDateTime getDischargeTime() { return dischargeTime; }
-    public void setDischargeTime(LocalDateTime dischargeTime) { this.dischargeTime = dischargeTime; }
+    public Instant getDischargeTime() { return dischargeTime; }
+    public void setDischargeTime(Instant dischargeTime) { this.dischargeTime = dischargeTime; }
 
     public VisitStatus getStatus() { return status; }
     public void setStatus(VisitStatus status) { this.status = status; }
