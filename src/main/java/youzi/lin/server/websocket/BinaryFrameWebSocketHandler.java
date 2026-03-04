@@ -8,11 +8,10 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
 import org.springframework.web.util.UriComponentsBuilder;
+import youzi.lin.server.grpc.GrpcFrameAnalysisClient;
 import youzi.lin.server.enums.VisitStatus;
 import youzi.lin.server.repository.VisitRepository;
 import youzi.lin.server.service.FrameBufferService;
-
-import java.net.URI;
 
 /**
  * WebSocket 二进制帧处理器。
@@ -31,13 +30,16 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     private final WebSocketSessionManager sessionManager;
     private final FrameBufferService frameBufferService;
     private final VisitRepository visitRepository;
+    private final GrpcFrameAnalysisClient grpcClient;
 
     public BinaryFrameWebSocketHandler(WebSocketSessionManager sessionManager,
                                        FrameBufferService frameBufferService,
-                                       VisitRepository visitRepository) {
+                                       VisitRepository visitRepository,
+                                       GrpcFrameAnalysisClient grpcClient) {
         this.sessionManager = sessionManager;
         this.frameBufferService = frameBufferService;
         this.visitRepository = visitRepository;
+        this.grpcClient = grpcClient;
     }
 
     @Override
@@ -58,6 +60,8 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) {
         var sessionId = session.getId();
+        // 先刷盘剩余分析结果，再清理会话状态
+        grpcClient.flushAndRemoveSession(sessionId);
         sessionManager.remove(sessionId);
         frameBufferService.removeSession(sessionId);
         log.info("[WebSocket] 客户端已断开：{}，状态：{}", sessionId, status);
@@ -67,6 +71,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         var sessionId = session.getId();
         log.error("[WebSocket] 传输错误，会话：{}，原因：{}", sessionId, exception.getMessage());
+        grpcClient.flushAndRemoveSession(sessionId);
         sessionManager.remove(sessionId);
         frameBufferService.removeSession(sessionId);
         try {

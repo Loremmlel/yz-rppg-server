@@ -6,6 +6,7 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
+import youzi.lin.server.grpc.GrpcFrameAnalysisClient;
 import youzi.lin.server.repository.VisitRepository;
 import youzi.lin.server.service.FrameBufferService;
 import youzi.lin.server.websocket.BinaryFrameWebSocketHandler;
@@ -23,13 +24,16 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final WebSocketSessionManager sessionManager;
     private final FrameBufferService frameBufferService;
     private final VisitRepository visitRepository;
+    private final GrpcFrameAnalysisClient grpcClient;
 
     public WebSocketConfig(WebSocketSessionManager sessionManager,
                            FrameBufferService frameBufferService,
-                           VisitRepository visitRepository) {
+                           VisitRepository visitRepository,
+                           GrpcFrameAnalysisClient grpcClient) {
         this.sessionManager = sessionManager;
         this.frameBufferService = frameBufferService;
         this.visitRepository = visitRepository;
+        this.grpcClient = grpcClient;
     }
 
     @Override
@@ -40,7 +44,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Bean
     public BinaryFrameWebSocketHandler binaryFrameWebSocketHandler() {
-        return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService, visitRepository);
+        return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService, visitRepository, grpcClient);
     }
 
     /**
