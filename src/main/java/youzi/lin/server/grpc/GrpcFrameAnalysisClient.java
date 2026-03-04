@@ -86,7 +86,7 @@ public class GrpcFrameAnalysisClient {
             @Override
             public void onNext(FrameBatchResponse response) {
                 var payload = response.getPayload().toByteArray();
-                log.debug("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
+                log.info("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
 
                 FrameAnalysisResultDTO result;
                 try {
@@ -166,9 +166,33 @@ public class GrpcFrameAnalysisClient {
     private void safeSaveAll(List<PatientVitals> entities, String sessionId) {
         try {
             vitalsService.saveAll(entities);
+            log.info("[gRPC] 会话 {} 成功批量写入 {} 条记录", sessionId, entities.size());
         } catch (Exception e) {
-            log.error("[gRPC] 会话 {} 批量写入 TimescaleDB 失败: {}", sessionId, e.getMessage(), e);
+            if (isShutdownCause(e)) {
+                // 应用正在关闭，JPA/EntityManagerFactory 已先于 WebSocket 下线，
+                // 此时写入失败属于预期行为，仅记录 WARN，不作为异常处理。
+                log.warn("[gRPC] 会话 {} 应用关闭期间丢弃 {} 条未持久化记录",
+                        sessionId, entities.size());
+            } else {
+                log.error("[gRPC] 会话 {} 批量写入 TimescaleDB 失败: {}", sessionId, e.getMessage(), e);
+            }
         }
+    }
+
+    /**
+     * 判断异常是否由应用关闭（EntityManagerFactory 已关闭）引起。
+     * 向上递归检查 cause 链，避免被包装层干扰。
+     */
+    private static boolean isShutdownCause(Throwable t) {
+        while (t != null) {
+            if (t instanceof IllegalStateException
+                    && t.getMessage() != null
+                    && t.getMessage().contains("closed")) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 
     /**
