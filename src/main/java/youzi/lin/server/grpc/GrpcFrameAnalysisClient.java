@@ -108,15 +108,15 @@ public class GrpcFrameAnalysisClient {
 
     /**
      * 向 WebSocket 客户端推送精简心率指标 JSON：
-     * <pre>{"heartRate": 82.26, "sqi": 0.54}</pre>
+     * <pre>{"hr": 82.26, "sqi": 0.54}</pre>
      */
     private void pushHeartRateToClient(String sessionId, FrameAnalysisResultDTO result) {
         try {
             ObjectNode output = objectMapper.createObjectNode();
             if (result.getHr() != null) {
-                output.put("heartRate", result.getHr());
+                output.put("hr", result.getHr());
             } else {
-                output.putNull("heartRate");
+                output.putNull("hr");
             }
             if (result.getSqi() != null) {
                 output.put("sqi", result.getSqi());
