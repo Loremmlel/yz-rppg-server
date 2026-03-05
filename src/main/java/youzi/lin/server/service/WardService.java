@@ -7,7 +7,6 @@ import youzi.lin.server.dto.RoomDto;
 import youzi.lin.server.dto.WardBriefDto;
 import youzi.lin.server.dto.WardDto;
 import youzi.lin.server.entity.Bed;
-import youzi.lin.server.entity.Visit;
 import youzi.lin.server.enums.VisitStatus;
 import youzi.lin.server.repository.BedRepository;
 import youzi.lin.server.repository.VisitRepository;
@@ -63,6 +62,18 @@ public class WardService {
         return beds.stream()
                 .map(this::toBedDetailDto)
                 .toList();
+    }
+
+    /**
+     * 通过床位 ID 查询当前在住患者信息。
+     * 若床位不存在或当前无在住患者，返回 Optional.empty()。
+     */
+    public Optional<PatientBriefDto> getCurrentPatientByBedId(Long bedId) {
+        return visitRepository.findByBedIdAndStatus(bedId, VisitStatus.VISITED)
+                .map(visit -> {
+                    var patient = visit.getPatient();
+                    return new PatientBriefDto(patient.getId(), patient.getName(), patient.getGender().name());
+                });
     }
 
     /**

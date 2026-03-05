@@ -3,6 +3,7 @@ package youzi.lin.server.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import youzi.lin.server.dto.BedDetailDto;
+import youzi.lin.server.dto.PatientBriefDto;
 import youzi.lin.server.dto.RoomDto;
 import youzi.lin.server.dto.WardBriefDto;
 import youzi.lin.server.dto.WardDto;
@@ -16,6 +17,7 @@ import java.util.List;
  * GET /api/wards                                  → 所有病区（含各病区病房、床位及在住患者）
  * GET /api/wards/{wardCode}/rooms                 → 指定病区的所有病房（含床位及在住患者）
  * GET /api/wards/{wardCode}/rooms/{roomNo}/beds   → 指定病房内所有床位（含在住患者）
+ * GET /api/wards/beds/{bedId}/patient             → 指定床位当前在住患者信息
  */
 @RestController
 @RequestMapping("/api/wards")
@@ -68,6 +70,17 @@ public class WardController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(beds);
+    }
+
+    /**
+     * 通过床位 ID 查询当前在住患者信息。
+     * 若床位当前无在住患者，返回 404。
+     */
+    @GetMapping("/beds/{bedId}/patient")
+    public ResponseEntity<PatientBriefDto> getCurrentPatientByBedId(@PathVariable Long bedId) {
+        return wardService.getCurrentPatientByBedId(bedId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }
 
