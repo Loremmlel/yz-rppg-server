@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.*;
 import youzi.lin.server.dto.VitalsRealtimeDto;
 import youzi.lin.server.dto.VitalsTrendDto;
 import youzi.lin.server.service.PatientVitalsService;
+import youzi.lin.server.service.WardService;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,9 +27,11 @@ import java.util.List;
 public class VitalsController {
 
     private final PatientVitalsService vitalsService;
+    private final WardService wardService;
 
-    public VitalsController(PatientVitalsService vitalsService) {
+    public VitalsController(PatientVitalsService vitalsService, WardService wardService) {
         this.vitalsService = vitalsService;
+        this.wardService = wardService;
     }
 
     // =========================================================
@@ -51,21 +54,27 @@ public class VitalsController {
      */
     @GetMapping("/realtime")
     public ResponseEntity<List<VitalsRealtimeDto>> getRealtime(
-            @RequestParam(required = false) Long bedId,
+            @RequestParam Long bedId,
             @RequestParam(required = false) Long patientId,
             @RequestParam(defaultValue = "60") int durationSeconds) {
 
-        if (durationSeconds <= 0 || durationSeconds > 86400) {
+        if (durationSeconds <= 0 || durationSeconds > 86400 || bedId == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        if (bedId != null) {
-            return ResponseEntity.ok(vitalsService.getRealtimeByBedId(bedId, durationSeconds));
-        }
         if (patientId != null) {
-            return ResponseEntity.ok(vitalsService.getRealtimeByPatientId(patientId, durationSeconds));
+            return ResponseEntity.ok(vitalsService.getRealtimeByBedIdAndPatientId(bedId, patientId, durationSeconds));
         }
-        return ResponseEntity.badRequest().build();
+        var currentPatientOpt = wardService.getCurrentPatientByBedId(bedId);
+        return currentPatientOpt
+                .map(patient ->
+                        ResponseEntity.ok(
+                                vitalsService.getRealtimeByBedIdAndPatientId(
+                                        bedId, patient.id(), durationSeconds
+                                )
+                        )
+                )
+                .orElseGet(() -> ResponseEntity.ok(vitalsService.getRealtimeByBedId(bedId, durationSeconds)));
     }
 
     // =========================================================
@@ -91,12 +100,12 @@ public class VitalsController {
     @GetMapping("/trend")
     public ResponseEntity<List<VitalsTrendDto>> getTrend(
             @RequestParam Long bedId,
-            @RequestParam Long patientId,
+            @RequestParam(required = false) Long patientId,
             @RequestParam Instant startTime,
             @RequestParam Instant endTime,
             @RequestParam(defaultValue = "1m") String interval) {
 
-        if (startTime.isAfter(endTime) || bedId == null || patientId == null) {
+        if (startTime.isAfter(endTime) || bedId == null) {
             return ResponseEntity.badRequest().build();
         }
 
@@ -104,8 +113,18 @@ public class VitalsController {
         if (pgInterval == null) {
             return ResponseEntity.badRequest().build();
         }
+        if (patientId != null) {
+            return ResponseEntity.ok(vitalsService.getTrendByBedIdAndPatientId(bedId, patientId, startTime, endTime, pgInterval));
+        }
 
-        return ResponseEntity.ok(vitalsService.getTrendByBedIdAndPatientId(bedId, patientId, startTime, endTime, pgInterval));
+        var currentPatientOpt = wardService.getCurrentPatientByBedId(bedId);
+        return currentPatientOpt
+                .map(patient -> ResponseEntity.ok(
+                        vitalsService.getTrendByBedIdAndPatientId(
+                                bedId, patient.id(), startTime, endTime, pgInterval
+                        )
+                ))
+                .orElseGet(() -> ResponseEntity.badRequest().build());
     }
 
     // =========================================================
@@ -163,16 +182,16 @@ public class VitalsController {
         if (interval.contains(" ")) return interval;
 
         return switch (interval.toLowerCase()) {
-            case "1m"  -> "1 minute";
-            case "5m"  -> "5 minutes";
+            case "1m" -> "1 minute";
+            case "5m" -> "5 minutes";
             case "10m" -> "10 minutes";
             case "15m" -> "15 minutes";
             case "30m" -> "30 minutes";
-            case "1h"  -> "1 hour";
-            case "6h"  -> "6 hours";
+            case "1h" -> "1 hour";
+            case "6h" -> "6 hours";
             case "12h" -> "12 hours";
-            case "1d"  -> "1 day";
-            default    -> null;
+            case "1d" -> "1 day";
+            default -> null;
         };
     }
 }

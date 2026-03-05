@@ -159,6 +159,12 @@ public class PatientVitalsService {
         return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
     }
 
+    public List<VitalsRealtimeDto> getRealtimeByBedIdAndPatientId(Long bedId, Long patientId, int durationSeconds) {
+        var since = Instant.now().minusSeconds(durationSeconds);
+        var entities = repository.findByBedIdAndPatientIdAndTimeAfterOrderByTimeDesc(bedId, patientId, since);
+        return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
+    }
+
     /**
      * 历史趋势聚合查询（按床位 ID 和患者 ID）。
      *

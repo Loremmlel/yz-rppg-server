@@ -47,6 +47,16 @@ public interface PatientVitalsRepository extends JpaRepository<PatientVitals, Pa
     List<PatientVitals> findByPatientIdAndTimeAfterOrderByTimeDesc(Long patientId, Instant since);
 
     /**
+     * 按床位 ID 和患者 ID 获取指定时间范围内的原始数据，按时间倒序。
+     *
+     * @param bedId     床位 ID
+     * @param patientId 患者 ID
+     * @param since     起始时刻
+     * @return 原始数据列表（时间倒序）
+     */
+    List<PatientVitals> findByBedIdAndPatientIdAndTimeAfterOrderByTimeDesc(Long bedId, Long patientId, Instant since);
+
+    /**
      * 按床位 ID 和时间范围查询原始数据（用于历史回溯），按时间倒序。
      */
     List<PatientVitals> findByBedIdAndTimeBetweenOrderByTimeDesc(Long bedId, Instant start, Instant end);
