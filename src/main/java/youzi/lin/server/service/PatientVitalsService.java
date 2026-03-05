@@ -160,23 +160,16 @@ public class PatientVitalsService {
     }
 
     /**
-     * 历史趋势聚合查询（按床位 ID）。
+     * 历史趋势聚合查询（按床位 ID 和患者 ID）。
      *
      * @param bedId    床位 ID
+     * @param patientId 患者 ID
      * @param start    查询起始时刻
      * @param end      查询结束时刻
      * @param interval TimescaleDB 时间桶大小字符串，如 {@code "1 minute"}、{@code "5 minutes"}、{@code "1 hour"}
      */
-    public List<VitalsTrendDto> getTrendByBedId(Long bedId, Instant start, Instant end, String interval) {
-        var rows = repository.aggregateByBedId(bedId, start, end, interval);
-        return rows.stream().map(PatientVitalsService::toTrendDTO).toList();
-    }
-
-    /**
-     * 历史趋势聚合查询（按患者 ID）。
-     */
-    public List<VitalsTrendDto> getTrendByPatientId(Long patientId, Instant start, Instant end, String interval) {
-        var rows = repository.aggregateByPatientId(patientId, start, end, interval);
+    public List<VitalsTrendDto> getTrendByBedIdAndPatientId(Long bedId, Long patientId, Instant start, Instant end, String interval) {
+        var rows = repository.aggregateByBedIdAndPatientId(bedId, patientId, start, end, interval);
         return rows.stream().map(PatientVitalsService::toTrendDTO).toList();
     }
 

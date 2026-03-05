@@ -90,13 +90,13 @@ public class VitalsController {
      */
     @GetMapping("/trend")
     public ResponseEntity<List<VitalsTrendDto>> getTrend(
-            @RequestParam(required = false) Long bedId,
-            @RequestParam(required = false) Long patientId,
+            @RequestParam Long bedId,
+            @RequestParam Long patientId,
             @RequestParam Instant startTime,
             @RequestParam Instant endTime,
             @RequestParam(defaultValue = "1m") String interval) {
 
-        if (startTime.isAfter(endTime)) {
+        if (startTime.isAfter(endTime) || bedId == null || patientId == null) {
             return ResponseEntity.badRequest().build();
         }
 
@@ -105,13 +105,7 @@ public class VitalsController {
             return ResponseEntity.badRequest().build();
         }
 
-        if (bedId != null) {
-            return ResponseEntity.ok(vitalsService.getTrendByBedId(bedId, startTime, endTime, pgInterval));
-        }
-        if (patientId != null) {
-            return ResponseEntity.ok(vitalsService.getTrendByPatientId(patientId, startTime, endTime, pgInterval));
-        }
-        return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(vitalsService.getTrendByBedIdAndPatientId(bedId, patientId, startTime, endTime, pgInterval));
     }
 
     // =========================================================

@@ -61,7 +61,7 @@ public interface PatientVitalsRepository extends JpaRepository<PatientVitals, Pa
     // =========================================================
 
     /**
-     * 按床位 ID 进行时间窗口聚合查询。
+     * 按床位 ID 和患者 ID 进行时间窗口聚合查询。
      * <p>
      * HRV 时域指标（sdnn、rmssd 等）使用 {@code percentile_cont(0.5)} 中位数，
      * 以提升对异常毛刺的鲁棒性。
@@ -91,42 +91,13 @@ public interface PatientVitalsRepository extends JpaRepository<PatientVitals, Pa
                 AVG(pv.hrv_tp)                                      AS tp_avg
             FROM patient_vitals pv
             WHERE pv.bed_id = :bedId
+              AND pv.patient_id = :patientId
               AND pv."time" BETWEEN :start AND :end
             GROUP BY bucket_time
             ORDER BY bucket_time ASC
             """, nativeQuery = true)
-    List<VitalsAggregationRow> aggregateByBedId(
+    List<VitalsAggregationRow> aggregateByBedIdAndPatientId(
             @Param("bedId") Long bedId,
-            @Param("start") Instant start,
-            @Param("end") Instant end,
-            @Param("interval") String interval);
-
-    /**
-     * 按患者 ID 进行时间窗口聚合查询，逻辑同 {@link #aggregateByBedId}。
-     */
-    @Query(value = """
-            SELECT
-                time_bucket(CAST(:interval AS INTERVAL), pv."time") AS bucket_time,
-                AVG(pv.hr)                                          AS hr_avg,
-                AVG(pv.hrv_breathingrate)                           AS br_avg,
-                AVG(pv.sqi)                                         AS sqi_avg,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_sdnn)  AS sdnn_median,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_rmssd) AS rmssd_median,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_sdsd)  AS sdsd_median,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_pnn50) AS pnn50_median,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_pnn20) AS pnn20_median,
-                AVG(pv.hrv_lf_hf)                                   AS lf_hf_ratio,
-                AVG(pv.hrv_hf)                                      AS hf_avg,
-                AVG(pv.hrv_lf)                                      AS lf_avg,
-                AVG(pv.hrv_vlf)                                     AS vlf_avg,
-                AVG(pv.hrv_tp)                                      AS tp_avg
-            FROM patient_vitals pv
-            WHERE pv.patient_id = :patientId
-              AND pv."time" BETWEEN :start AND :end
-            GROUP BY bucket_time
-            ORDER BY bucket_time ASC
-            """, nativeQuery = true)
-    List<VitalsAggregationRow> aggregateByPatientId(
             @Param("patientId") Long patientId,
             @Param("start") Instant start,
             @Param("end") Instant end,
