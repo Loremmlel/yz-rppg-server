@@ -17,7 +17,7 @@ import java.time.Instant;
  * }
  * </pre>
  */
-public class VitalsTrendDTO {
+public class VitalsTrendDto {
 
     /** time_bucket 时间窗口起始时刻（UTC） */
     private Instant bucketTime;
@@ -139,7 +139,7 @@ public class VitalsTrendDTO {
 
     // ── 构造器 / Getters / Setters ────────────────────────────
 
-    public VitalsTrendDTO() {}
+    public VitalsTrendDto() {}
 
     public Instant getBucketTime() { return bucketTime; }
     public void setBucketTime(Instant bucketTime) { this.bucketTime = bucketTime; }

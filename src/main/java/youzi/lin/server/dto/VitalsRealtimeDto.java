@@ -8,7 +8,7 @@ import java.time.Instant;
  * 将数据库平铺字段按业务含义分组后返回给前端，避免灾难性的字段展示。
  * </p>
  */
-public class VitalsRealtimeDTO {
+public class VitalsRealtimeDto {
 
     /** 数据采集时间戳（UTC ISO-8601） */
     private Instant time;
@@ -142,7 +142,7 @@ public class VitalsRealtimeDTO {
 
     // ── 构造器 / Getters / Setters ────────────────────────────
 
-    public VitalsRealtimeDTO() {}
+    public VitalsRealtimeDto() {}
 
     public Instant getTime() { return time; }
     public void setTime(Instant time) { this.time = time; }

@@ -17,7 +17,7 @@ import java.util.List;
  * <p>
  * 职责：
  * <ul>
- *     <li>将 gRPC 返回的 {@link FrameAnalysisResultDTO} 转换为 {@link PatientVitals} 实体并批量持久化</li>
+ *     <li>将 gRPC 返回的 {@link FrameAnalysisResultDto} 转换为 {@link PatientVitals} 实体并批量持久化</li>
  *     <li>SQI &lt; 0.5 时，HRV 相关字段直接置 {@code null} 入库</li>
  *     <li>组装 Repository 查询结果，转换为分组 DTO 返回给 Controller</li>
  * </ul>
@@ -65,7 +65,7 @@ public class PatientVitalsService {
      * @param time      数据时间戳（通常为当前时刻）
      */
     @Transactional
-    public void save(FrameAnalysisResultDTO result, Long bedId, Long patientId, Instant time) {
+    public void save(FrameAnalysisResultDto result, Long bedId, Long patientId, Instant time) {
         if (bedId == null || patientId == null) {
             log.debug("[Vitals] bedId 或 patientId 为 null，跳过写入");
             return;
@@ -91,7 +91,7 @@ public class PatientVitalsService {
      * 将 gRPC 返回结果转换为 {@link PatientVitals} 实体（对外暴露，供 gRPC 客户端使用）。
      * 当 SQI &lt; {@value #SQI_THRESHOLD} 时，HRV 字段置 null。
      */
-    public PatientVitals toEntity(FrameAnalysisResultDTO result,
+    public PatientVitals toEntity(FrameAnalysisResultDto result,
                                   Long bedId, Long patientId, Instant time) {
         var entity = new PatientVitals();
         entity.setTime(time);
@@ -141,7 +141,7 @@ public class PatientVitalsService {
      * @param bedId           床位 ID
      * @param durationSeconds 时间窗口大小（秒）
      */
-    public List<VitalsRealtimeDTO> getRealtimeByBedId(Long bedId, int durationSeconds) {
+    public List<VitalsRealtimeDto> getRealtimeByBedId(Long bedId, int durationSeconds) {
         var since = Instant.now().minusSeconds(durationSeconds);
         var entities = repository.findByBedIdAndTimeAfterOrderByTimeDesc(bedId, since);
         return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
@@ -153,7 +153,7 @@ public class PatientVitalsService {
      * @param patientId       患者 ID
      * @param durationSeconds 时间窗口大小（秒）
      */
-    public List<VitalsRealtimeDTO> getRealtimeByPatientId(Long patientId, int durationSeconds) {
+    public List<VitalsRealtimeDto> getRealtimeByPatientId(Long patientId, int durationSeconds) {
         var since = Instant.now().minusSeconds(durationSeconds);
         var entities = repository.findByPatientIdAndTimeAfterOrderByTimeDesc(patientId, since);
         return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
@@ -167,7 +167,7 @@ public class PatientVitalsService {
      * @param end      查询结束时刻
      * @param interval TimescaleDB 时间桶大小字符串，如 {@code "1 minute"}、{@code "5 minutes"}、{@code "1 hour"}
      */
-    public List<VitalsTrendDTO> getTrendByBedId(Long bedId, Instant start, Instant end, String interval) {
+    public List<VitalsTrendDto> getTrendByBedId(Long bedId, Instant start, Instant end, String interval) {
         var rows = repository.aggregateByBedId(bedId, start, end, interval);
         return rows.stream().map(PatientVitalsService::toTrendDTO).toList();
     }
@@ -175,7 +175,7 @@ public class PatientVitalsService {
     /**
      * 历史趋势聚合查询（按患者 ID）。
      */
-    public List<VitalsTrendDTO> getTrendByPatientId(Long patientId, Instant start, Instant end, String interval) {
+    public List<VitalsTrendDto> getTrendByPatientId(Long patientId, Instant start, Instant end, String interval) {
         var rows = repository.aggregateByPatientId(patientId, start, end, interval);
         return rows.stream().map(PatientVitalsService::toTrendDTO).toList();
     }
@@ -183,7 +183,7 @@ public class PatientVitalsService {
     /**
      * 获取指定床位最新一条记录（实时大屏用）。
      */
-    public VitalsRealtimeDTO getLatestByBedId(Long bedId) {
+    public VitalsRealtimeDto getLatestByBedId(Long bedId) {
         var entity = repository.findLatestByBedId(bedId);
         return entity != null ? toRealtimeDTO(entity) : null;
     }
@@ -191,7 +191,7 @@ public class PatientVitalsService {
     /**
      * 获取指定患者最新一条记录。
      */
-    public VitalsRealtimeDTO getLatestByPatientId(Long patientId) {
+    public VitalsRealtimeDto getLatestByPatientId(Long patientId) {
         var entity = repository.findLatestByPatientId(patientId);
         return entity != null ? toRealtimeDTO(entity) : null;
     }
@@ -200,14 +200,14 @@ public class PatientVitalsService {
     // 私有转换方法
     // =========================================================
 
-    private static VitalsRealtimeDTO toRealtimeDTO(PatientVitals e) {
-        var dto = new VitalsRealtimeDTO();
+    private static VitalsRealtimeDto toRealtimeDTO(PatientVitals e) {
+        var dto = new VitalsRealtimeDto();
         dto.setTime(e.getTime());
         dto.setBedId(e.getBedId());
         dto.setPatientId(e.getPatientId());
 
         // 基础生命体征
-        var basic = new VitalsRealtimeDTO.BasicVitals(
+        var basic = new VitalsRealtimeDto.BasicVitals(
                 e.getHr(), e.getSqi(), e.getHrvBreathingrate(), e.getLatency());
         dto.setBasicVitals(basic);
 
@@ -216,7 +216,7 @@ public class PatientVitalsService {
             var td = getHrvTimeDomain(e);
             dto.setHrvTimeDomain(td);
 
-            var fd = new VitalsRealtimeDTO.HrvFreqDomain();
+            var fd = new VitalsRealtimeDto.HrvFreqDomain();
             fd.setVlf(e.getHrvVlf());
             fd.setTp(e.getHrvTp());
             fd.setHf(e.getHrvHf());
@@ -228,8 +228,8 @@ public class PatientVitalsService {
         return dto;
     }
 
-    private static VitalsRealtimeDTO.@NonNull HrvTimeDomain getHrvTimeDomain(PatientVitals e) {
-        var td = new VitalsRealtimeDTO.HrvTimeDomain();
+    private static VitalsRealtimeDto.@NonNull HrvTimeDomain getHrvTimeDomain(PatientVitals e) {
+        var td = new VitalsRealtimeDto.HrvTimeDomain();
         td.setBpm(e.getHrvBpm());
         td.setIbi(e.getHrvIbi());
         td.setSdnn(e.getHrvSdnn());
@@ -245,18 +245,18 @@ public class PatientVitalsService {
         return td;
     }
 
-    private static VitalsTrendDTO toTrendDTO(VitalsAggregationRow row) {
-        var dto = new VitalsTrendDTO();
+    private static VitalsTrendDto toTrendDTO(VitalsAggregationRow row) {
+        var dto = new VitalsTrendDto();
         dto.setBucketTime(row.getBucketTime());
 
-        dto.setBasicVitals(new VitalsTrendDTO.BasicVitals(
+        dto.setBasicVitals(new VitalsTrendDto.BasicVitals(
                 row.getHrAvg(), row.getBrAvg(), row.getSqiAvg()));
 
-        dto.setHrvTimeDomain(new VitalsTrendDTO.HrvTimeDomain(
+        dto.setHrvTimeDomain(new VitalsTrendDto.HrvTimeDomain(
                 row.getSdnnMedian(), row.getRmssdMedian(), row.getSdsdMedian(),
                 row.getPnn50Median(), row.getPnn20Median()));
 
-        dto.setHrvFreqDomain(new VitalsTrendDTO.HrvFreqDomain(
+        dto.setHrvFreqDomain(new VitalsTrendDto.HrvFreqDomain(
                 row.getLfHfRatio(), row.getHfAvg(), row.getLfAvg(),
                 row.getVlfAvg(), row.getTpAvg()));
 

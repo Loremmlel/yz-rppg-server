@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.grpc.client.GrpcChannelFactory;
 import org.springframework.stereotype.Component;
-import youzi.lin.server.dto.FrameAnalysisResultDTO;
+import youzi.lin.server.dto.FrameAnalysisResultDto;
 import youzi.lin.server.entity.PatientVitals;
 import youzi.lin.server.service.PatientVitalsService;
 import youzi.lin.server.websocket.VideoFrameData;
@@ -88,9 +88,9 @@ public class GrpcFrameAnalysisClient {
                 var payload = response.getPayload().toByteArray();
                 log.info("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
 
-                FrameAnalysisResultDTO result;
+                FrameAnalysisResultDto result;
                 try {
-                    result = objectMapper.readValue(payload, FrameAnalysisResultDTO.class);
+                    result = objectMapper.readValue(payload, FrameAnalysisResultDto.class);
                 } catch (Exception e) {
                     log.error("[gRPC] 会话 {} 解析分析结果失败: {}", sessionId, e.getMessage(), e);
                     return;
@@ -138,7 +138,7 @@ public class GrpcFrameAnalysisClient {
      * 将当前分析结果追加到 per-session 缓冲；
      * 达到 {@value #BATCH_SIZE} 条或超过 {@value #FLUSH_INTERVAL_MS} ms 时批量写入。
      */
-    private void bufferAndFlush(String sessionId, FrameAnalysisResultDTO result) {
+    private void bufferAndFlush(String sessionId, FrameAnalysisResultDto result) {
         Long bedId = sessionManager.getBedId(sessionId);
         Long patientId = sessionManager.getPatientId(sessionId);
         if (bedId == null || patientId == null) {
@@ -199,7 +199,7 @@ public class GrpcFrameAnalysisClient {
      * 向 WebSocket 客户端推送精简心率指标 JSON：
      * <pre>{"hr": 82.26, "sqi": 0.54}</pre>
      */
-    private void pushHeartRateToClient(String sessionId, FrameAnalysisResultDTO result) {
+    private void pushHeartRateToClient(String sessionId, FrameAnalysisResultDto result) {
         try {
             ObjectNode output = objectMapper.createObjectNode();
             if (result.getHr() != null) {

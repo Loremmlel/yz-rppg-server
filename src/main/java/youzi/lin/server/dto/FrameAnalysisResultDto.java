@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * 当 SQI &lt; 0.5 时，Python 端返回 {@code "hrv": null}，此时 {@link #hrv} 为 {@code null}。
  * </p>
  */
-public class FrameAnalysisResultDTO {
+public class FrameAnalysisResultDto {
 
     @JsonProperty("hr")
     private Double hr;

@@ -2,8 +2,8 @@ package youzi.lin.server.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import youzi.lin.server.dto.VitalsRealtimeDTO;
-import youzi.lin.server.dto.VitalsTrendDTO;
+import youzi.lin.server.dto.VitalsRealtimeDto;
+import youzi.lin.server.dto.VitalsTrendDto;
 import youzi.lin.server.service.PatientVitalsService;
 
 import java.time.Instant;
@@ -50,7 +50,7 @@ public class VitalsController {
      * @return 原始数据列表（时间倒序）
      */
     @GetMapping("/realtime")
-    public ResponseEntity<List<VitalsRealtimeDTO>> getRealtime(
+    public ResponseEntity<List<VitalsRealtimeDto>> getRealtime(
             @RequestParam(required = false) Long bedId,
             @RequestParam(required = false) Long patientId,
             @RequestParam(defaultValue = "60") int durationSeconds) {
@@ -89,7 +89,7 @@ public class VitalsController {
      * @return 聚合趋势数据列表（时间升序）
      */
     @GetMapping("/trend")
-    public ResponseEntity<List<VitalsTrendDTO>> getTrend(
+    public ResponseEntity<List<VitalsTrendDto>> getTrend(
             @RequestParam(required = false) Long bedId,
             @RequestParam(required = false) Long patientId,
             @RequestParam Instant startTime,
@@ -128,11 +128,11 @@ public class VitalsController {
      * </pre>
      */
     @GetMapping("/latest")
-    public ResponseEntity<VitalsRealtimeDTO> getLatest(
+    public ResponseEntity<VitalsRealtimeDto> getLatest(
             @RequestParam(required = false) Long bedId,
             @RequestParam(required = false) Long patientId) {
 
-        VitalsRealtimeDTO result;
+        VitalsRealtimeDto result;
         if (bedId != null) {
             result = vitalsService.getLatestByBedId(bedId);
         } else if (patientId != null) {
