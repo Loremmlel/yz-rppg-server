@@ -90,8 +90,8 @@ public class VitalsController {
      * GET /api/vitals/trend?patientId=3&startTime=...&endTime=...&interval=1h
      * </pre>
      *
-     * @param bedId     床位 ID（与 patientId 二选一）
-     * @param patientId 患者 ID（与 bedId 二选一）
+     * @param bedId     床位 ID
+     * @param patientId 患者 ID
      * @param startTime 查询起始时刻（ISO-8601 UTC，如 {@code 2026-03-04T00:00:00Z}）
      * @param endTime   查询结束时刻（ISO-8601 UTC）
      * @param interval  时间桶大小，支持 {@code 1m}、{@code 5m}、{@code 15m}、{@code 1h}，默认 {@code 1m}
