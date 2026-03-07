@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: server
+  datasource:
+    url: jdbc:postgresql://localhost:5432/rppg
+    username: postgres
+    password: 1234
+    driver-class-name: org.postgresql.Driver
+
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      max-lifetime: 600000
+      idle-timeout: 300000
+      pool-name: YouziHikariPool
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:init-data.sql
+      encoding: UTF-8
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        # ── Hibernate 批量写入优化（适用于 1 Hz 高频时序数据入库）──────────
+        jdbc:
+          batch_size: 50          # 每批最多 50 条 SQL 合并提交
+        order_inserts: true       # 合并同类型 INSERT，提升批量效率
+        order_updates: true       # 合并同类型 UPDATE
+    defer-datasource-initialization: true
+
+  grpc:
+    client:
+      channels:
+        frame-analysis:
+          address: static://localhost:50051
+          negotiation-type: PLAINTEXT
+
