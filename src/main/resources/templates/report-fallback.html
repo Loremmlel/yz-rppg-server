@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>健康报告(降级)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+        h1, h2 { margin-bottom: 8px; }
+        .meta { background: #f3f4f6; padding: 12px; border-radius: 6px; margin-bottom: 16px; }
+        .warn { color: #b91c1c; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+        th { background: #f9fafb; }
+    </style>
+</head>
+<body>
+<h1>健康报告(规则降级版)</h1>
+<div class="meta">
+    <div>bedId: <span th:text="${bedId}"></span></div>
+    <div>patientId: <span th:text="${patientId}"></span></div>
+    <div>时间范围: <span th:text="${startTime}"></span> - <span th:text="${endTime}"></span></div>
+    <div>聚合间隔: <span th:text="${interval}"></span></div>
+</div>
+<p class="warn">LLM 服务不可用，以下为规则分析结果。原因: <span th:text="${errorMessage}"></span></p>
+
+<h2>指标分析</h2>
+<table>
+    <thead>
+    <tr>
+        <th>指标</th>
+        <th>最新值</th>
+        <th>正常范围</th>
+        <th>状态</th>
+        <th>趋势</th>
+        <th>稳定性</th>
+        <th>斜率</th>
+        <th>标准差</th>
+        <th>样本数</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="m : ${summary.metrics}">
+        <td th:text="${m.metricName}"></td>
+        <td th:text="${m.latestValue}"></td>
+        <td th:text="${m.normalRange}"></td>
+        <td th:text="${m.status}"></td>
+        <td th:text="${m.trend}"></td>
+        <td th:text="${m.stability}"></td>
+        <td th:text="${m.slope}"></td>
+        <td th:text="${m.standardDeviation}"></td>
+        <td th:text="${m.sampleCount}"></td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>
+

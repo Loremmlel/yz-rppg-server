@@ -1,0 +1,17 @@
+# 任务角色
+{{ROLE_DESCRIPTION}}
+
+# 数据摘要
+{{DATA_SUMMARY}}
+
+# 规则分析结果
+{{ANALYSIS_SUMMARY}}
+
+# 输出要求
+{{OUTPUT_REQUIREMENT}}
+
+额外要求：
+- 使用简体中文。
+- 结论应强调风险分级，不给出确定性诊断。
+- 建议部分要区分“立即处理”和“持续观察”。
+
