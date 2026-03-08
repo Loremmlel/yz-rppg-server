@@ -20,6 +20,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * gRPC 客户端：将帧批次发送至 Python 分析服务，并将结果回传给 WebSocket 客户端。
@@ -47,6 +51,9 @@ public class GrpcFrameAnalysisClient {
      */
     private static final long FLUSH_INTERVAL_MS = 10_000;
 
+    /** 聚合日志的统计周期（秒）；每隔此时长打印一次汇总 INFO 日志。 */
+    private static final long STATS_INTERVAL_SECONDS = 30;
+
     private final FrameAnalysisServiceGrpc.FrameAnalysisServiceStub asyncStub;
     private final WebSocketSessionManager sessionManager;
     private final PatientVitalsService vitalsService;
@@ -54,6 +61,17 @@ public class GrpcFrameAnalysisClient {
 
     /** per-session 写入缓冲，key = sessionId */
     private final ConcurrentHashMap<String, SessionBuffer> buffers = new ConcurrentHashMap<>();
+
+    /** 周期内的聚合统计 */
+    private final GrpcStats stats = new GrpcStats();
+
+    /** 定时打印汇总日志，守护线程，应用退出时自动销毁 */
+    private final ScheduledExecutorService statsScheduler =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "grpc-stats-logger");
+                t.setDaemon(true);
+                return t;
+            });
 
     public GrpcFrameAnalysisClient(GrpcChannelFactory channelFactory,
                                    WebSocketSessionManager sessionManager,
@@ -63,6 +81,14 @@ public class GrpcFrameAnalysisClient {
         this.objectMapper = new ObjectMapper();
         ManagedChannel channel = channelFactory.createChannel("frame-analysis");
         this.asyncStub = FrameAnalysisServiceGrpc.newStub(channel);
+
+        // 定时打印聚合统计，避免每条结果都写一行 INFO 日志刷屏
+        statsScheduler.scheduleAtFixedRate(
+                this::logAndResetStats,
+                STATS_INTERVAL_SECONDS,
+                STATS_INTERVAL_SECONDS,
+                TimeUnit.SECONDS
+        );
     }
 
     /**
@@ -86,15 +112,18 @@ public class GrpcFrameAnalysisClient {
             @Override
             public void onNext(FrameBatchResponse response) {
                 var payload = response.getPayload().toByteArray();
-                log.info("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
+                log.debug("[gRPC] 会话 {} 收到分析结果，大小: {} 字节", sessionId, payload.length);
 
                 FrameAnalysisResultDto result;
                 try {
                     result = objectMapper.readValue(payload, FrameAnalysisResultDto.class);
                 } catch (Exception e) {
+                    stats.parseErrors.incrementAndGet();
                     log.error("[gRPC] 会话 {} 解析分析结果失败: {}", sessionId, e.getMessage(), e);
                     return;
                 }
+
+                stats.resultsReceived.incrementAndGet();
 
                 // 1. 向 WebSocket 客户端推送精简心率指标（TextMessage）
                 pushHeartRateToClient(sessionId, result);
@@ -105,6 +134,7 @@ public class GrpcFrameAnalysisClient {
 
             @Override
             public void onError(Throwable t) {
+                stats.grpcErrors.incrementAndGet();
                 log.error("[gRPC] 会话 {} 分析请求失败: {}", sessionId, t.getMessage(), t);
             }
 
@@ -166,14 +196,17 @@ public class GrpcFrameAnalysisClient {
     private void safeSaveAll(List<PatientVitals> entities, String sessionId) {
         try {
             vitalsService.saveAll(entities);
-            log.info("[gRPC] 会话 {} 成功批量写入 {} 条记录", sessionId, entities.size());
+            stats.rowsPersisted.addAndGet(entities.size());
+            log.debug("[gRPC] 会话 {} 批量写入 {} 条记录", sessionId, entities.size());
         } catch (Exception e) {
             if (isShutdownCause(e)) {
                 // 应用正在关闭，JPA/EntityManagerFactory 已先于 WebSocket 下线，
                 // 此时写入失败属于预期行为，仅记录 WARN，不作为异常处理。
+                stats.rowsDropped.addAndGet(entities.size());
                 log.warn("[gRPC] 会话 {} 应用关闭期间丢弃 {} 条未持久化记录",
                         sessionId, entities.size());
             } else {
+                stats.dbErrors.incrementAndGet();
                 log.error("[gRPC] 会话 {} 批量写入 TimescaleDB 失败: {}", sessionId, e.getMessage(), e);
             }
         }
@@ -193,6 +226,31 @@ public class GrpcFrameAnalysisClient {
             t = t.getCause();
         }
         return false;
+    }
+
+    /**
+     * 定时打印周期内的聚合统计日志，并将计数器清零，为下个周期重新计数。
+     * <p>
+     * 仅在有实际活动时才打印，避免空闲期产生无意义的日志行。
+     * </p>
+     */
+    private void logAndResetStats() {
+        long received = stats.resultsReceived.getAndSet(0);
+        long persisted = stats.rowsPersisted.getAndSet(0);
+        long dropped = stats.rowsDropped.getAndSet(0);
+        long parseErr = stats.parseErrors.getAndSet(0);
+        long grpcErr = stats.grpcErrors.getAndSet(0);
+        long dbErr = stats.dbErrors.getAndSet(0);
+
+        // 周期内无任何活动时跳过，保持日志安静
+        if (received == 0 && grpcErr == 0) {
+            return;
+        }
+
+        log.info("[gRPC 统计] 过去 {}s：收到结果 {}，持久化 {} 行，丢弃 {} 行，"
+                + "解析失败 {}，gRPC 错误 {}，DB 错误 {}",
+                STATS_INTERVAL_SECONDS, received, persisted, dropped,
+                parseErr, grpcErr, dbErr);
     }
 
     /**
@@ -248,5 +306,23 @@ public class GrpcFrameAnalysisClient {
             lastFlushMs = System.currentTimeMillis();
             return snapshot;
         }
+    }
+
+    /**
+     * 周期内 gRPC 处理指标的聚合统计容器，所有字段使用 {@link AtomicLong} 保证线程安全。
+     */
+    private static final class GrpcStats {
+        /** 成功解析并处理的分析结果条数 */
+        final AtomicLong resultsReceived = new AtomicLong();
+        /** 成功持久化到 TimescaleDB 的行数 */
+        final AtomicLong rowsPersisted = new AtomicLong();
+        /** 应用关闭期间因 EntityManagerFactory 已销毁而丢弃的行数 */
+        final AtomicLong rowsDropped = new AtomicLong();
+        /** JSON 解析失败次数 */
+        final AtomicLong parseErrors = new AtomicLong();
+        /** gRPC 调用失败次数（onError 触发次数） */
+        final AtomicLong grpcErrors = new AtomicLong();
+        /** 批量写入 DB 失败次数（非关闭引起） */
+        final AtomicLong dbErrors = new AtomicLong();
     }
 }
