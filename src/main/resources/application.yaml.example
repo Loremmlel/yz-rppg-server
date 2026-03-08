@@ -39,4 +39,7 @@ spring:
         frame-analysis:
           address: static://localhost:50051
           negotiation-type: PLAINTEXT
-
+  ai:
+    openai-sdk:
+      base-url: https://api.openai.com/v1
+      api-key: your-api-key-here
