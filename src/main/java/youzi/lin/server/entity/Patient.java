@@ -3,19 +3,31 @@ package youzi.lin.server.entity;
 import jakarta.persistence.*;
 import youzi.lin.server.enums.Gender;
 
+/**
+ * 患者实体，对应数据库表 {@code patient}。
+ * <p>
+ * 毕设场景下患者信息由系统直接管理；
+ * 生产环境应对接医院 HIS（医院信息系统）获取患者主索引。
+ * </p>
+ */
 @Entity
 @Table(name = "patient")
 public class Patient {
     /**
-     * 患者id，最好接入医院信息系统，毕设当然是构造一个简单的完整系统
+     * 患者主键 ID。生产环境宜替换为 HIS 患者主索引，避免重复建档。
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     private String name;
+
     @Enumerated(EnumType.STRING)
     private Gender gender;
+
+    /** 身份证号（唯一索引，可用于跨次就诊关联） */
     private String idCardNo;
+
     private String phoneNo;
 
     public Long getId() { return id; }

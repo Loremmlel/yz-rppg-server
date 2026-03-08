@@ -102,7 +102,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     }
 
     /**
-     * 根据床位 ID 查询当前在院（{@link VisitStatus#VISITED}）的患者 ID。
+     * 根据床位 ID 查询当前在院（{@link VisitStatus#ADMITTED}）的患者 ID。
      *
      * @param bedId     床位 ID，可能为 {@code null}
      * @param sessionId 仅用于日志
@@ -112,7 +112,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
         if (bedId == null) {
             return null;
         }
-        return visitRepository.findByBedIdAndStatus(bedId, VisitStatus.VISITED)
+        return visitRepository.findByBedIdAndStatus(bedId, VisitStatus.ADMITTED)
                 .map(visit -> visit.getPatient().getId())
                 .orElseGet(() -> {
                     log.info("[WebSocket] 会话 {} 的床位 {} 当前无在院患者", sessionId, bedId);

@@ -12,12 +12,15 @@ import youzi.lin.server.service.WardService;
 import java.util.List;
 
 /**
- * 病区/病房/床位查询接口（只读，客户端不操作住院出院）
- * GET /api/wards/list                             → 所有病区代码列表（轻量，用于选择病区）
- * GET /api/wards                                  → 所有病区（含各病区病房、床位及在住患者）
- * GET /api/wards/{wardCode}/rooms                 → 指定病区的所有病房（含床位及在住患者）
- * GET /api/wards/{wardCode}/rooms/{roomNo}/beds   → 指定病房内所有床位（含在住患者）
- * GET /api/wards/beds/{bedId}/patient             → 指定床位当前在住患者信息
+ * 病区/病房/床位查询接口（只读，住院出院操作由 HIS 负责）。
+ *
+ * <ul>
+ *   <li>{@code GET /api/wards/list}                           — 所有病区代码列表（轻量，用于选择病区）</li>
+ *   <li>{@code GET /api/wards}                                — 所有病区（含各病区病房、床位及在住患者）</li>
+ *   <li>{@code GET /api/wards/{wardCode}/rooms}               — 指定病区的所有病房（含床位及在住患者）</li>
+ *   <li>{@code GET /api/wards/{wardCode}/rooms/{roomNo}/beds} — 指定病房内所有床位（含在住患者）</li>
+ *   <li>{@code GET /api/wards/beds/{bedId}/patient}           — 指定床位当前在住患者信息</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/api/wards")
@@ -30,8 +33,10 @@ public class WardController {
     }
 
     /**
-     * 获取所有病区代码列表（轻量接口，不含病房和床位详情）
-     * 客户端先调用此接口获取病区列表，再选择病区获取详细数据
+     * 获取所有病区代码列表（轻量接口，不含病房和床位详情）。
+     * <p>
+     * 客户端通常先调用此接口填充病区选择框，再按需加载详细数据，以减少首屏流量。
+     * </p>
      */
     @GetMapping("/list")
     public ResponseEntity<List<WardBriefDto>> getWardList() {

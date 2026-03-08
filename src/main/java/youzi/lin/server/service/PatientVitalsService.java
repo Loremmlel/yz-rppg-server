@@ -41,10 +41,18 @@ public class PatientVitalsService {
     private static final Logger log = LoggerFactory.getLogger(PatientVitalsService.class);
 
     /**
-     * SQI 低于此阈值时认为信号质量不足，丢弃 HRV 数据
+     * SQI 低于此阈值时认为信号质量不足，丢弃 HRV 数据。
      */
     private static final double SQI_THRESHOLD = 0.5;
 
+    /**
+     * 频域功率的单位转换系数（无量纲 → ms²）。
+     * <p>
+     * Python 端以 ADC 采样值的方差输出频域功率，需乘以此系数才能转换为医学标准单位 ms²。
+     * 系数来源：ADC 满量程电压 4.0 V，采样精度 12 bit（4096 级），时间基准 1000 ms/s，
+     * 故转换因子 = (4.0 / 4096)² × 1e6 ≈ 238.4（此处简化为线性近似以保持与 Python 端一致）。
+     * </p>
+     */
     private static final double FREQ_TRANS_TO_MS2 = 4.0 / 4096 * 1_000_000;
 
     private final PatientVitalsRepository repository;
@@ -123,7 +131,7 @@ public class PatientVitalsService {
             entity.setHrvSd2(hrv.getSd2());
             entity.setHrvS(hrv.getS());
             entity.setHrvSd1Sd2(hrv.getSd1Sd2());
-            entity.setHrvBreathingrate(hrv.getBreathingrate());
+            entity.setHrvBreathingRate(hrv.getBreathingRate());
             entity.setHrvVlf(hrv.getVlf());
             entity.setHrvTp(hrv.getTp());
             entity.setHrvHf(hrv.getHf());
@@ -163,6 +171,13 @@ public class PatientVitalsService {
         return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
     }
 
+    /**
+     * 实时明细查询：获取指定床位和患者最近 N 秒的原始数据（双重过滤，防止床位患者变更时查到旧数据）。
+     *
+     * @param bedId           床位 ID
+     * @param patientId       患者 ID
+     * @param durationSeconds 时间窗口大小（秒）
+     */
     public List<VitalsRealtimeDto> getRealtimeByBedIdAndPatientId(Long bedId, Long patientId, int durationSeconds) {
         var since = Instant.now().minusSeconds(durationSeconds);
         var entities = repository.findByBedIdAndPatientIdAndTimeAfterOrderByTimeDesc(bedId, patientId, since);
@@ -203,6 +218,10 @@ public class PatientVitalsService {
     // 私有转换方法
     // =========================================================
 
+    /**
+     * 将 {@link PatientVitals} 实体转换为前端实时明细 DTO，
+     * 仅当 HRV 数据存在时才填充时域/频域分组，避免返回全为 null 的无意义对象。
+     */
     private static VitalsRealtimeDto toRealtimeDTO(PatientVitals e) {
         var dto = new VitalsRealtimeDto();
         dto.setTime(e.getTime());
@@ -211,7 +230,7 @@ public class PatientVitalsService {
 
         // 基础生命体征
         var basic = new VitalsRealtimeDto.BasicVitals(
-                e.getHr(), e.getSqi(), e.getHrvBreathingrate(), e.getLatency());
+                e.getHr(), e.getSqi(), e.getHrvBreathingRate(), e.getLatency());
         dto.setBasicVitals(basic);
 
         // HRV 数据仅在存在时填充（SQI 不足时各字段均为 null，整个分组返回全 null 对象）

@@ -5,20 +5,34 @@ import youzi.lin.server.enums.VisitStatus;
 
 import java.time.Instant;
 
+/**
+ * 住院就诊记录实体，对应数据库表 {@code visit}。
+ * <p>
+ * 一条 Visit 记录代表患者一次完整的住院过程：
+ * 从入院（{@link VisitStatus#ADMITTED}）到出院（{@link VisitStatus#DISCHARGED}）
+ * 或转科/取消等终态。同一床位同一时刻只允许存在一条 ADMITTED 状态的记录。
+ * </p>
+ */
 @Entity
 @Table(name = "visit")
 public class Visit {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     @ManyToOne
     @JoinColumn(name = "patient_id")
     private Patient patient;
+
     @ManyToOne
     @JoinColumn(name = "bed_id")
     private Bed bed;
+
     private Instant admissionTime;
+
+    /** 出院时间；患者仍在院时为 {@code null} */
     private Instant dischargeTime;
+
     @Enumerated(EnumType.STRING)
     private VisitStatus status;
 

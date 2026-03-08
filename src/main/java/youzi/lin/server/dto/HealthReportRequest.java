@@ -4,6 +4,11 @@ import java.time.Instant;
 
 /**
  * 健康报告生成请求参数。
+ * <p>
+ * {@code bedId} 和 {@code patientId} 均为必填项；
+ * {@code interval} 支持简写格式（如 {@code "5m"}），由 Controller 层统一转换为
+ * PostgreSQL INTERVAL 字符串后传入 Service。
+ * </p>
  */
 public class HealthReportRequest {
 
@@ -11,6 +16,8 @@ public class HealthReportRequest {
     private Long patientId;
     private Instant startTime;
     private Instant endTime;
+
+    /** 时间聚合粒度，如 {@code "1 minute"}、{@code "5 minutes"}、{@code "1 hour"} */
     private String interval;
 
     public HealthReportRequest() {
@@ -56,4 +63,3 @@ public class HealthReportRequest {
         this.interval = interval;
     }
 }
-

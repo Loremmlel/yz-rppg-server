@@ -80,7 +80,7 @@ public class FrameAnalysisResultDto {
         private Double sd1Sd2;
 
         @JsonProperty("breathingrate")
-        private Double breathingrate;
+        private Double breathingRate;
 
         @JsonProperty("VLF")
         private Double vlf;
@@ -133,8 +133,8 @@ public class FrameAnalysisResultDto {
         public Double getSd1Sd2() { return sd1Sd2; }
         public void setSd1Sd2(Double sd1Sd2) { this.sd1Sd2 = sd1Sd2; }
 
-        public Double getBreathingrate() { return breathingrate; }
-        public void setBreathingrate(Double breathingrate) { this.breathingrate = breathingrate; }
+        public Double getBreathingRate() { return breathingRate; }
+        public void setBreathingRate(Double breathingRate) { this.breathingRate = breathingRate; }
 
         public Double getVlf() { return vlf; }
         public void setVlf(Double vlf) { this.vlf = vlf; }

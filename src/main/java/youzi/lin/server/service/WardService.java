@@ -14,6 +14,13 @@ import youzi.lin.server.repository.VisitRepository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 病区/病房/床位业务服务。
+ * <p>
+ * 提供只读查询：病区列表、病房列表、床位详情及在住患者信息。
+ * 住院/出院操作由医院信息系统负责，本服务不涉及写操作。
+ * </p>
+ */
 @Service
 public class WardService {
 
@@ -66,10 +73,10 @@ public class WardService {
 
     /**
      * 通过床位 ID 查询当前在住患者信息。
-     * 若床位不存在或当前无在住患者，返回 Optional.empty()。
+     * 若床位不存在或当前无在住患者，返回 {@link Optional#empty()}。
      */
     public Optional<PatientBriefDto> getCurrentPatientByBedId(Long bedId) {
-        return visitRepository.findByBedIdAndStatus(bedId, VisitStatus.VISITED)
+        return visitRepository.findByBedIdAndStatus(bedId, VisitStatus.ADMITTED)
                 .map(visit -> {
                     var patient = visit.getPatient();
                     return new PatientBriefDto(patient.getId(), patient.getName(), patient.getGender().name());
@@ -77,10 +84,10 @@ public class WardService {
     }
 
     /**
-     * 将 Bed 实体转换为 BedDetailDto，如果床位被占用则查询并填充当前患者信息
+     * 将 Bed 实体转换为 BedDetailDto，如果床位被占用则查询并填充当前患者信息。
      */
     private BedDetailDto toBedDetailDto(Bed bed) {
-        var activeVisit = visitRepository.findByBedIdAndStatus(bed.getId(), VisitStatus.VISITED);
+        var activeVisit = visitRepository.findByBedIdAndStatus(bed.getId(), VisitStatus.ADMITTED);
         var patientDto = activeVisit.map(visit -> {
             var patient = visit.getPatient();
             return new PatientBriefDto(patient.getId(), patient.getName(), patient.getGender().name());

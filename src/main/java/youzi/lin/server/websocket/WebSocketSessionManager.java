@@ -17,9 +17,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 维护所有活跃客户端会话，提供注册 / 注销 / 按 ID 发送消息等能力。
  * 同一 session 的写操作需加同步锁（WebSocketSession 本身非线程安全）。
+ * </p>
  * <p>
  * 同时维护 sessionId ↔ bedId 的双向映射，供业务层按床位查找会话；
  * 以及 sessionId → patientId 的映射，供业务层按患者关联数据。
+ * </p>
  */
 @Component
 public class WebSocketSessionManager {
@@ -48,7 +50,7 @@ public class WebSocketSessionManager {
         sessions.put(session.getId(), session);
 
         if (bedId != null) {
-            // 若该床位已有旧会话，先清除旧映射
+            // 若该床位已有旧会话，先清除旧映射，防止 bedSessionMap 中残留过期 sessionId
             var oldSessionId = bedSessionMap.put(bedId, session.getId());
             if (oldSessionId != null && !oldSessionId.equals(session.getId())) {
                 sessionBedMap.remove(oldSessionId);
@@ -65,6 +67,13 @@ public class WebSocketSessionManager {
         }
     }
 
+    /**
+     * 注销会话并清理所有相关映射（sessionId ↔ bedId ↔ patientId）。
+     * <p>
+     * {@code @SuppressWarnings("resource")} 是因为 ConcurrentHashMap 实现了 Closeable，
+     * 但此处仅调用 remove 方法，无需关闭，编译器警告属于误报。
+     * </p>
+     */
     @SuppressWarnings("resource")
     public void remove(String sessionId) {
         sessions.remove(sessionId);
@@ -77,6 +86,9 @@ public class WebSocketSessionManager {
         sessionPatientMap.remove(sessionId);
     }
 
+    /**
+     * 按 sessionId 获取会话，不存在时返回 {@code null}。
+     */
     public WebSocketSession get(String sessionId) {
         return sessions.get(sessionId);
     }
@@ -105,6 +117,9 @@ public class WebSocketSessionManager {
         return sessionPatientMap.get(sessionId);
     }
 
+    /**
+     * 返回所有当前活跃会话的集合（非快照，由心跳任务遍历使用）。
+     */
     public Collection<WebSocketSession> allSessions() {
         return sessions.values();
     }

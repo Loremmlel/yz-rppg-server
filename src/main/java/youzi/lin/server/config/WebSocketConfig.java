@@ -36,12 +36,25 @@ public class WebSocketConfig implements WebSocketConfigurer {
         this.grpcClient = grpcClient;
     }
 
+    /**
+     * 注册二进制帧处理器到 {@code /ws} 端点，并允许所有来源跨域连接。
+     * <p>
+     * 允许所有来源是因为前端部署地址在开发阶段不固定；生产环境应收紧为具体域名。
+     * </p>
+     */
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(binaryFrameWebSocketHandler(), "/ws")
                 .setAllowedOrigins("*");
     }
 
+    /**
+     * 构造并注册 {@link BinaryFrameWebSocketHandler} Bean。
+     * <p>
+     * 手动构造而非使用 @Autowired 注入，是因为此 Handler 非 Spring 管理的 Bean，
+     * 需要在配置类中显式创建并传入依赖。
+     * </p>
+     */
     @Bean
     public BinaryFrameWebSocketHandler binaryFrameWebSocketHandler() {
         return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService, visitRepository, grpcClient);

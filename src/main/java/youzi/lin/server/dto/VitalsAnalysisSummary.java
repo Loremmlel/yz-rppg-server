@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 多指标规则分析汇总结果。
+ * 多指标规则分析汇总结果，包含每个生命体征指标的独立分析报告。
  */
 public class VitalsAnalysisSummary {
 
@@ -14,12 +14,18 @@ public class VitalsAnalysisSummary {
         return metrics;
     }
 
+    /**
+     * 添加单个指标分析结果；{@code null} 值被忽略，避免空指针污染列表。
+     */
     public void addMetric(MetricAnalysis metric) {
         if (metric != null) {
             metrics.add(metric);
         }
     }
 
+    /**
+     * 单个指标的完整分析结果，包含最新值、正常范围、状态判定、趋势和稳定性。
+     */
     public static class MetricAnalysis {
         private String metricKey;
         private String metricName;
@@ -122,23 +128,43 @@ public class VitalsAnalysisSummary {
         }
     }
 
+    /**
+     * 指标状态：与正常范围对比的结果。
+     */
     public enum MetricStatus {
+        /** 在正常范围内 */
         NORMAL,
+        /** 高于正常上限 */
         HIGH,
+        /** 低于正常下限 */
         LOW,
+        /** 数据不足，无法判断 */
         UNKNOWN
     }
 
+    /**
+     * 趋势方向：基于线性回归斜率判定。
+     */
     public enum TrendDirection {
+        /** 上升趋势 */
         RISING,
+        /** 下降趋势 */
         FALLING,
+        /** 相对平稳 */
         STABLE,
+        /** 数据不足，无法判断 */
         UNKNOWN
     }
 
+    /**
+     * 稳定性状态：基于标准差判定。
+     */
     public enum StabilityStatus {
+        /** 波动较大（标准差超过阈值） */
         FLUCTUATING,
+        /** 相对稳定 */
         STEADY,
+        /** 数据不足，无法判断 */
         UNKNOWN
     }
 }

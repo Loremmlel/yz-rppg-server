@@ -89,7 +89,7 @@ public class PatientVitals {
     private Double hrvSd1Sd2;
 
     @Column(name = "hrv_breathingrate")
-    private Double hrvBreathingrate;
+    private Double hrvBreathingRate;
 
     // ── HRV 频域指标 ─────────────────────────────────────────
 
@@ -164,8 +164,8 @@ public class PatientVitals {
     public Double getHrvSd1Sd2() { return hrvSd1Sd2; }
     public void setHrvSd1Sd2(Double hrvSd1Sd2) { this.hrvSd1Sd2 = hrvSd1Sd2; }
 
-    public Double getHrvBreathingrate() { return hrvBreathingrate; }
-    public void setHrvBreathingrate(Double hrvBreathingrate) { this.hrvBreathingrate = hrvBreathingrate; }
+    public Double getHrvBreathingRate() { return hrvBreathingRate; }
+    public void setHrvBreathingRate(Double hrvBreathingRate) { this.hrvBreathingRate = hrvBreathingRate; }
 
     public Double getHrvVlf() { return hrvVlf; }
     public void setHrvVlf(Double hrvVlf) { this.hrvVlf = hrvVlf; }

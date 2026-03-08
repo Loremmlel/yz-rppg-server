@@ -146,6 +146,7 @@ abstract class AbstractVitalsAnalyzer implements VitalsAnalyzer {
     }
 }
 
+/** 心率分析器，正常范围 60~100 bpm（静息成人标准）。 */
 @Component
 class HrAnalyzer extends AbstractVitalsAnalyzer {
     HrAnalyzer() {
@@ -154,6 +155,7 @@ class HrAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** SDNN 分析器，反映总体 HRV 水平，正常范围 30~100 ms。 */
 @Component
 class HrvSdnnAnalyzer extends AbstractVitalsAnalyzer {
     HrvSdnnAnalyzer() {
@@ -162,6 +164,7 @@ class HrvSdnnAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** RMSSD 分析器，反映副交感神经活性，正常范围 20~80 ms。 */
 @Component
 class HrvRmssdAnalyzer extends AbstractVitalsAnalyzer {
     HrvRmssdAnalyzer() {
@@ -170,6 +173,7 @@ class HrvRmssdAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** SDSD 分析器，与 RMSSD 互为补充，正常范围 15~80 ms。 */
 @Component
 class HrvSdsdAnalyzer extends AbstractVitalsAnalyzer {
     HrvSdsdAnalyzer() {
@@ -178,6 +182,7 @@ class HrvSdsdAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** pNN50 分析器，相邻 RR 间期差值 &gt;50 ms 的比例，正常范围 3%~25%。 */
 @Component
 class HrvPnn50Analyzer extends AbstractVitalsAnalyzer {
     HrvPnn50Analyzer() {
@@ -186,6 +191,7 @@ class HrvPnn50Analyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** pNN20 分析器，相邻 RR 间期差值 &gt;20 ms 的比例，正常范围 10%~45%。 */
 @Component
 class HrvPnn20Analyzer extends AbstractVitalsAnalyzer {
     HrvPnn20Analyzer() {
@@ -194,6 +200,7 @@ class HrvPnn20Analyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** 信号质量指数分析器，低于 0.5 时 HRV 数据不可信。 */
 @Component
 class SqiAnalyzer extends AbstractVitalsAnalyzer {
     SqiAnalyzer() {
@@ -202,6 +209,7 @@ class SqiAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** 呼吸率分析器，正常范围 0.18~0.33 Hz（约 11~20 次/分）。 */
 @Component
 class BrAnalyzer extends AbstractVitalsAnalyzer {
     BrAnalyzer() {
@@ -210,6 +218,7 @@ class BrAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** LF/HF 比值分析器，反映自主神经平衡，正常范围 0.5~2.0。 */
 @Component
 class LfHfAnalyzer extends AbstractVitalsAnalyzer {
     LfHfAnalyzer() {
@@ -218,34 +227,38 @@ class LfHfAnalyzer extends AbstractVitalsAnalyzer {
     }
 }
 
+/** HF 功率分析器，反映副交感神经活性，正常范围 200~1500 ms²。 */
 @Component
 class HfAnalyzer extends AbstractVitalsAnalyzer {
     HfAnalyzer() {
-        super("hf", "HF", "ms2", 200.0, 1500.0, 3.0, 120.0,
+        super("hf", "HF", "ms²", 200.0, 1500.0, 3.0, 120.0,
                 trend -> trend.getHrvFreqDomain() != null ? trend.getHrvFreqDomain().getHfAvg() : null);
     }
 }
 
+/** LF 功率分析器，反映交感与副交感混合活性，正常范围 300~1700 ms²。 */
 @Component
 class LfAnalyzer extends AbstractVitalsAnalyzer {
     LfAnalyzer() {
-        super("lf", "LF", "ms2", 300.0, 1700.0, 3.0, 130.0,
+        super("lf", "LF", "ms²", 300.0, 1700.0, 3.0, 130.0,
                 trend -> trend.getHrvFreqDomain() != null ? trend.getHrvFreqDomain().getLfAvg() : null);
     }
 }
 
+/** VLF 功率分析器，正常范围 100~1200 ms²。 */
 @Component
 class VlfAnalyzer extends AbstractVitalsAnalyzer {
     VlfAnalyzer() {
-        super("vlf", "VLF", "ms2", 100.0, 1200.0, 2.0, 100.0,
+        super("vlf", "VLF", "ms²", 100.0, 1200.0, 2.0, 100.0,
                 trend -> trend.getHrvFreqDomain() != null ? trend.getHrvFreqDomain().getVlfAvg() : null);
     }
 }
 
+/** 总功率分析器，反映整体 HRV 能量水平，正常范围 500~3500 ms²。 */
 @Component
 class TpAnalyzer extends AbstractVitalsAnalyzer {
     TpAnalyzer() {
-        super("tp", "总功率", "ms2", 500.0, 3500.0, 5.0, 220.0,
+        super("tp", "总功率", "ms²", 500.0, 3500.0, 5.0, 220.0,
                 trend -> trend.getHrvFreqDomain() != null ? trend.getHrvFreqDomain().getTpAvg() : null);
     }
 }

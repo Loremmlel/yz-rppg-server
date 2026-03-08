@@ -13,6 +13,10 @@ import java.util.Locale;
 
 /**
  * 构建发送给 LLM 的文本 Prompt（Builder 模式）。
+ * <p>
+ * 模板文件路径：{@code classpath:prompts/report-prompt.txt}，
+ * 使用 {@code {{占位符}}} 格式替换，与 Mustache/Thymeleaf 无关，仅为简单文本替换。
+ * </p>
  */
 @Component
 public class PromptBuilder {
@@ -25,6 +29,14 @@ public class PromptBuilder {
         this.template = loadTemplate(resourceLoader);
     }
 
+    /**
+     * 构建完整的 LLM Prompt 文本。
+     *
+     * @param trends  时间窗口聚合趋势数据（取最近 10 个时间桶序列化到 Prompt 中，
+     *                因为 LLM 上下文窗口有限，全量数据会增加 token 消耗和推理时间）
+     * @param summary 规则引擎分析汇总，已包含各指标状态/趋势/稳定性判定
+     * @return 可直接发送给 LLM 的文本
+     */
     public String build(List<VitalsTrendDto> trends, VitalsAnalysisSummary summary) {
         String dataSummary = buildDataSummary(trends);
         String analysisSummary = buildAnalysisSummary(summary);
@@ -91,6 +103,10 @@ public class PromptBuilder {
         return value == null ? "null" : String.format(Locale.ROOT, "%.4f", value);
     }
 
+    /**
+     * 加载 Prompt 模板文件；若文件不存在（如测试环境），使用内联兜底模板，
+     * 确保 PromptBuilder 在无资源文件时也能正常工作。
+     */
     private static String loadTemplate(ResourceLoader resourceLoader) {
         Resource resource = resourceLoader.getResource(TEMPLATE_PATH);
         try (var is = resource.getInputStream()) {
@@ -101,7 +117,11 @@ public class PromptBuilder {
     }
 
     /**
-     * 仅负责文本拼装的 Builder，避免 Prompt 结构散落在业务流程中。
+     * 仅负责文本占位符替换的内部 Builder。
+     * <p>
+     * 将 Prompt 结构（角色、数据摘要、分析摘要、输出要求）集中在此类组装，
+     * 避免拼接逻辑散落在业务流程中，便于测试和调整 Prompt 结构。
+     * </p>
      */
     static class PromptTextBuilder {
 

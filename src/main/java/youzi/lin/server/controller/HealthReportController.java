@@ -12,6 +12,20 @@ import youzi.lin.server.util.IntervalUtils;
 
 /**
  * 健康报告生成接口。
+ *
+ * <p>示例请求：</p>
+ * <pre>
+ * POST /api/report/generate
+ * Content-Type: application/json
+ *
+ * {
+ *   "bedId": 1,
+ *   "patientId": 3,
+ *   "startTime": "2026-03-04T00:00:00Z",
+ *   "endTime": "2026-03-04T12:00:00Z",
+ *   "interval": "5m"
+ * }
+ * </pre>
  */
 @RestController
 @RequestMapping("/api/report")
@@ -23,6 +37,16 @@ public class HealthReportController {
         this.healthReportService = healthReportService;
     }
 
+    /**
+     * 生成健康报告 HTML。
+     * <p>
+     * 调用链路：参数校验 → 时间窗口聚合查询 → 规则分析 → LLM 调用 → Markdown 转 HTML。
+     * LLM 调用失败时自动降级为基于规则分析结果的静态模板报告。
+     * </p>
+     *
+     * @param request 报告生成请求参数
+     * @return 报告 HTML 内容；参数非法时返回 400，其他情况始终返回 200（含降级报告）
+     */
     @PostMapping(value = "/generate", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> generateReport(@RequestBody HealthReportRequest request) {
         if (!isValidRequest(request)) {
@@ -34,11 +58,16 @@ public class HealthReportController {
             String html = healthReportService.generateReportHtml(request);
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
         } catch (Exception ex) {
+            // 兜底：即使 Service 层出现未预期的异常，也返回可读的降级报告而非 500
             String fallback = healthReportService.renderEmergencyFallback(request, ex);
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(fallback);
         }
     }
 
+    /**
+     * 校验报告请求必填字段：bedId、patientId、startTime、endTime 均不为 null，
+     * 且 startTime 不晚于 endTime。
+     */
     private boolean isValidRequest(HealthReportRequest request) {
         if (request == null) {
             return false;

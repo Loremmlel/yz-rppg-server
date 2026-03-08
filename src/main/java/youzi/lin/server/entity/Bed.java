@@ -3,28 +3,32 @@ package youzi.lin.server.entity;
 import jakarta.persistence.*;
 import youzi.lin.server.enums.BedStatus;
 
+/**
+ * 床位实体，对应数据库表 {@code bed}。
+ * <p>
+ * 床位通过 {@code wardCode + roomNo + bedNo} 三元组唯一标识物理位置，
+ * 并通过 {@code deviceSn} 与监护设备绑定。
+ * </p>
+ */
 @Entity
 @Table(name = "bed")
 public class Bed {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    /**
-     * 病区代码，如“内科一区”
-     */
+
+    /** 病区代码，如 "内科一区" */
     private String wardCode;
-    /**
-     * 房间号，如“101”
-     */
+
+    /** 房间号，如 "101" */
     private String roomNo;
-    /**
-     * 床位号，如“1”或“A”
-     */
+
+    /** 床位号，如 "1" 或 "A" */
     private String bedNo;
-    /**
-     * 绑定的设备序列号
-     */
+
+    /** 绑定的监护设备序列号 */
     private String deviceSn;
+
     @Enumerated(EnumType.STRING)
     private BedStatus status;
 
