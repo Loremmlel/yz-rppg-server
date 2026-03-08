@@ -40,8 +40,12 @@ public class PatientVitalsService {
 
     private static final Logger log = LoggerFactory.getLogger(PatientVitalsService.class);
 
-    /** SQI 低于此阈值时认为信号质量不足，丢弃 HRV 数据 */
+    /**
+     * SQI 低于此阈值时认为信号质量不足，丢弃 HRV 数据
+     */
     private static final double SQI_THRESHOLD = 0.5;
+
+    private static final double FREQ_TRANS_TO_MS2 = 4.0 / 4096 * 1_000_000;
 
     private final PatientVitalsRepository repository;
 
@@ -168,11 +172,11 @@ public class PatientVitalsService {
     /**
      * 历史趋势聚合查询（按床位 ID 和患者 ID）。
      *
-     * @param bedId    床位 ID
+     * @param bedId     床位 ID
      * @param patientId 患者 ID
-     * @param start    查询起始时刻
-     * @param end      查询结束时刻
-     * @param interval TimescaleDB 时间桶大小字符串，如 {@code "1 minute"}、{@code "5 minutes"}、{@code "1 hour"}
+     * @param start     查询起始时刻
+     * @param end       查询结束时刻
+     * @param interval  TimescaleDB 时间桶大小字符串，如 {@code "1 minute"}、{@code "5 minutes"}、{@code "1 hour"}
      */
     public List<VitalsTrendDto> getTrendByBedIdAndPatientId(Long bedId, Long patientId, Instant start, Instant end, String interval) {
         var rows = repository.aggregateByBedIdAndPatientId(bedId, patientId, start, end, interval);
@@ -215,12 +219,7 @@ public class PatientVitalsService {
             var td = getHrvTimeDomain(e);
             dto.setHrvTimeDomain(td);
 
-            var fd = new VitalsRealtimeDto.HrvFreqDomain();
-            fd.setVlf(e.getHrvVlf());
-            fd.setTp(e.getHrvTp());
-            fd.setHf(e.getHrvHf());
-            fd.setLf(e.getHrvLf());
-            fd.setLfHf(e.getHrvLfHf());
+            var fd = getHrvFreqDomain(e);
             dto.setHrvFreqDomain(fd);
         }
 
@@ -244,6 +243,16 @@ public class PatientVitalsService {
         return td;
     }
 
+    private static VitalsRealtimeDto.@NonNull HrvFreqDomain getHrvFreqDomain(PatientVitals e) {
+        var fd = new VitalsRealtimeDto.HrvFreqDomain();
+        fd.setVlf(e.getHrvVlf() * FREQ_TRANS_TO_MS2);
+        fd.setTp(e.getHrvTp() * FREQ_TRANS_TO_MS2);
+        fd.setHf(e.getHrvHf() * FREQ_TRANS_TO_MS2);
+        fd.setLf(e.getHrvLf() * FREQ_TRANS_TO_MS2);
+        fd.setLfHf(e.getHrvLfHf());
+        return fd;
+    }
+
     private static VitalsTrendDto toTrendDTO(VitalsAggregationRow row) {
         var dto = new VitalsTrendDto();
         dto.setBucketTime(row.getBucketTime());
@@ -256,8 +265,12 @@ public class PatientVitalsService {
                 row.getPnn50Median(), row.getPnn20Median()));
 
         dto.setHrvFreqDomain(new VitalsTrendDto.HrvFreqDomain(
-                row.getLfHfRatio(), row.getHfAvg(), row.getLfAvg(),
-                row.getVlfAvg(), row.getTpAvg()));
+                row.getLfHfRatio(),
+                row.getHfAvg() * FREQ_TRANS_TO_MS2,
+                row.getLfAvg() * FREQ_TRANS_TO_MS2,
+                row.getVlfAvg() * FREQ_TRANS_TO_MS2,
+                row.getTpAvg() * FREQ_TRANS_TO_MS2
+        ));
 
         return dto;
     }
