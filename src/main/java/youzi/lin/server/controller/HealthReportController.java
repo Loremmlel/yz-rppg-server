@@ -1,5 +1,7 @@
 package youzi.lin.server.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +33,8 @@ import youzi.lin.server.util.IntervalUtils;
 @RequestMapping("/api/report")
 public class HealthReportController {
 
+    private static final Logger log = LoggerFactory.getLogger(HealthReportController.class);
+
     private final HealthReportService healthReportService;
 
     public HealthReportController(HealthReportService healthReportService) {
@@ -50,15 +54,24 @@ public class HealthReportController {
     @PostMapping(value = "/generate", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> generateReport(@RequestBody HealthReportRequest request) {
         if (!isValidRequest(request)) {
+            log.info("[Report] POST /generate → 400（请求参数不合法：bedId={}, patientId={}, startTime={}, endTime={}）",
+                    request != null ? request.getBedId() : null,
+                    request != null ? request.getPatientId() : null,
+                    request != null ? request.getStartTime() : null,
+                    request != null ? request.getEndTime() : null);
             return ResponseEntity.badRequest().body("<html><body><h3>参数不合法</h3></body></html>");
         }
 
         try {
             request.setInterval(IntervalUtils.parseOrDefault(request.getInterval(), "1 minute"));
             String html = healthReportService.generateReportHtml(request);
+            log.info("[Report] POST /generate bedId={} patientId={} → 200（正常生成）",
+                    request.getBedId(), request.getPatientId());
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
         } catch (Exception ex) {
             // 兜底：即使 Service 层出现未预期的异常，也返回可读的降级报告而非 500
+            log.warn("[Report] POST /generate bedId={} patientId={} → 200（降级报告，原因：{}）",
+                    request.getBedId(), request.getPatientId(), ex.getMessage());
             String fallback = healthReportService.renderEmergencyFallback(request, ex);
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(fallback);
         }

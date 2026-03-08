@@ -62,22 +62,22 @@ VALUES ('内科一区', '101', '1', 'DEV-001', 'OCCUPIED'),
 ON CONFLICT (ward_code, room_no, bed_no) DO NOTHING;
 
 INSERT INTO visit (patient_id, bed_id, admission_time, discharge_time, status)
-SELECT p.id, b.id, '2026-02-01T08:00:00Z'::TIMESTAMPTZ, NULL, 'VISITED'
+SELECT p.id, b.id, '2026-02-01T08:00:00Z'::TIMESTAMPTZ, NULL, 'ADMITTED'
 FROM patient p, bed b WHERE p.id_card_no = '110101199001011234' AND b.device_sn = 'DEV-001'
 ON CONFLICT (patient_id, bed_id, admission_time) DO NOTHING;
 
 INSERT INTO visit (patient_id, bed_id, admission_time, discharge_time, status)
-SELECT p.id, b.id, '2026-02-05T09:30:00Z'::TIMESTAMPTZ, NULL, 'VISITED'
+SELECT p.id, b.id, '2026-02-05T09:30:00Z'::TIMESTAMPTZ, NULL, 'ADMITTED'
 FROM patient p, bed b WHERE p.id_card_no = '110101199202022345' AND b.device_sn = 'DEV-003'
 ON CONFLICT (patient_id, bed_id, admission_time) DO NOTHING;
 
 INSERT INTO visit (patient_id, bed_id, admission_time, discharge_time, status)
-SELECT p.id, b.id, '2026-02-10T10:00:00Z'::TIMESTAMPTZ, NULL, 'VISITED'
+SELECT p.id, b.id, '2026-02-10T10:00:00Z'::TIMESTAMPTZ, NULL, 'ADMITTED'
 FROM patient p, bed b WHERE p.id_card_no = '110101198503033456' AND b.device_sn = 'DEV-005'
 ON CONFLICT (patient_id, bed_id, admission_time) DO NOTHING;
 
 INSERT INTO visit (patient_id, bed_id, admission_time, discharge_time, status)
-SELECT p.id, b.id, '2026-02-15T14:00:00Z'::TIMESTAMPTZ, NULL, 'VISITED'
+SELECT p.id, b.id, '2026-02-15T14:00:00Z'::TIMESTAMPTZ, NULL, 'ADMITTED'
 FROM patient p, bed b WHERE p.id_card_no = '110101197804044567' AND b.device_sn = 'DEV-008'
 ON CONFLICT (patient_id, bed_id, admission_time) DO NOTHING;
 

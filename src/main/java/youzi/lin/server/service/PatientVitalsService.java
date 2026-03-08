@@ -50,7 +50,7 @@ public class PatientVitalsService {
      * <p>
      * Python 端以 ADC 采样值的方差输出频域功率，需乘以此系数才能转换为医学标准单位 ms²。
      * 系数来源：ADC 满量程电压 4.0 V，采样精度 12 bit（4096 级），时间基准 1000 ms/s，
-     * 故转换因子 = (4.0 / 4096)² × 1e6 ≈ 238.4（此处简化为线性近似以保持与 Python 端一致）。
+     * 故转换因子 = 4.0 / 4096 × 1e6 ≈ 978。
      * </p>
      */
     private static final double FREQ_TRANS_TO_MS2 = 4.0 / 4096 * 1_000_000;

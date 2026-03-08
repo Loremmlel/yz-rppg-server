@@ -1,5 +1,7 @@
 package youzi.lin.server.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import youzi.lin.server.dto.BedDetailDto;
@@ -26,6 +28,8 @@ import java.util.List;
 @RequestMapping("/api/wards")
 public class WardController {
 
+    private static final Logger log = LoggerFactory.getLogger(WardController.class);
+
     private final WardService wardService;
 
     public WardController(WardService wardService) {
@@ -40,7 +44,9 @@ public class WardController {
      */
     @GetMapping("/list")
     public ResponseEntity<List<WardBriefDto>> getWardList() {
-        return ResponseEntity.ok(wardService.getWardList());
+        var result = wardService.getWardList();
+        log.info("[Ward] GET /list → 返回 {} 个病区", result.size());
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -48,23 +54,29 @@ public class WardController {
      */
     @GetMapping
     public ResponseEntity<List<WardDto>> getAllWards() {
-        return ResponseEntity.ok(wardService.getAllWards());
+        var result = wardService.getAllWards();
+        log.info("[Ward] GET / → 返回 {} 个病区（含详情）", result.size());
+        return ResponseEntity.ok(result);
     }
 
     /**
-     * 获取指定病区下所有病房（含床位、患者）
+     * 获取指定病区下所有病房（含床位、患者）。
+     * 若病区不存在或无病房，返回 404。
      */
     @GetMapping("/{wardCode}/rooms")
     public ResponseEntity<List<RoomDto>> getRoomsInWard(@PathVariable String wardCode) {
         var rooms = wardService.getRoomsInWard(wardCode);
         if (rooms.isEmpty()) {
+            log.info("[Ward] GET /{}/rooms → 404（病区不存在或无病房）", wardCode);
             return ResponseEntity.notFound().build();
         }
+        log.info("[Ward] GET /{}/rooms → 返回 {} 个病房", wardCode, rooms.size());
         return ResponseEntity.ok(rooms);
     }
 
     /**
-     * 获取指定病区指定病房内所有床位（含患者）
+     * 获取指定病区指定病房内所有床位（含患者）。
+     * 若病房不存在或无床位，返回 404。
      */
     @GetMapping("/{wardCode}/rooms/{roomNo}/beds")
     public ResponseEntity<List<BedDetailDto>> getBedsInRoom(
@@ -72,8 +84,10 @@ public class WardController {
             @PathVariable String roomNo) {
         var beds = wardService.getBedsInRoom(wardCode, roomNo);
         if (beds.isEmpty()) {
+            log.info("[Ward] GET /{}/rooms/{}/beds → 404（病房不存在或无床位）", wardCode, roomNo);
             return ResponseEntity.notFound().build();
         }
+        log.info("[Ward] GET /{}/rooms/{}/beds → 返回 {} 张床位", wardCode, roomNo, beds.size());
         return ResponseEntity.ok(beds);
     }
 
@@ -83,9 +97,13 @@ public class WardController {
      */
     @GetMapping("/beds/{bedId}/patient")
     public ResponseEntity<PatientBriefDto> getCurrentPatientByBedId(@PathVariable Long bedId) {
-        return wardService.getCurrentPatientByBedId(bedId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        var opt = wardService.getCurrentPatientByBedId(bedId);
+        if (opt.isEmpty()) {
+            log.info("[Ward] GET /beds/{}/patient → 404（床位无在住患者）", bedId);
+            return ResponseEntity.notFound().build();
+        }
+        log.info("[Ward] GET /beds/{}/patient → 返回患者 id={}", bedId, opt.get().id());
+        return ResponseEntity.ok(opt.get());
     }
 }
 
