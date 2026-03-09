@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import youzi.lin.server.dto.HealthReportRequest;
 import youzi.lin.server.service.HealthReportService;
+import youzi.lin.server.service.WardService;
 import youzi.lin.server.util.IntervalUtils;
 
 /**
@@ -36,9 +37,11 @@ public class HealthReportController {
     private static final Logger log = LoggerFactory.getLogger(HealthReportController.class);
 
     private final HealthReportService healthReportService;
+    private final WardService wardService;
 
-    public HealthReportController(HealthReportService healthReportService) {
+    public HealthReportController(HealthReportService healthReportService, WardService wardService) {
         this.healthReportService = healthReportService;
+        this.wardService = wardService;
     }
 
     /**
@@ -60,6 +63,15 @@ public class HealthReportController {
                     request != null ? request.getStartTime() : null,
                     request != null ? request.getEndTime() : null);
             return ResponseEntity.badRequest().body("<html><body><h3>参数不合法</h3></body></html>");
+        }
+
+        if (request.getPatientId() == null) {
+            var currentPatientOpt = wardService.getCurrentPatientByBedId(request.getBedId());
+            if (currentPatientOpt.isEmpty()) {
+                log.info("[Report] POST /generate bedId={} → 400（床位当前无在住患者，且未指定 patientId）", request.getBedId());
+                return ResponseEntity.badRequest().body("<html><body><h3>床位当前无在住患者，无法生成报告</h3></body></html>");
+            }
+            request.setPatientId(currentPatientOpt.get().id());
         }
 
         try {
@@ -85,7 +97,7 @@ public class HealthReportController {
         if (request == null) {
             return false;
         }
-        if (request.getBedId() == null || request.getPatientId() == null) {
+        if (request.getBedId() == null) {
             return false;
         }
         if (request.getStartTime() == null || request.getEndTime() == null) {
