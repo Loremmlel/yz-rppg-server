@@ -116,7 +116,8 @@ public class GrpcFrameAnalysisClient {
             @Override
             public void onError(Throwable t) {
                 statsLogger.recordGrpcError();
-                log.error("[gRPC] 会话 {} 分析请求失败: {}", sessionId, t.getMessage(), t);
+                // 默认日志记录（可选，如果不想完全屏蔽可以保留，但此处按要求由 statsLogger 提供周期性统计报表）
+                log.debug("[gRPC] 会話 {} 分析请求失败: {}", sessionId, t.getMessage());
             }
 
             @Override

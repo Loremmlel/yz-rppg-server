@@ -44,7 +44,7 @@ public class HealthReportService {
                                PromptBuilder promptBuilder,
                                ChatClient.Builder chatClientBuilder,
                                SpringTemplateEngine templateEngine,
-                               @Value("${report.llm-timeout-seconds:20}") long llmTimeoutSeconds) {
+                               @Value("${report.llm-timeout-seconds:60}") long llmTimeoutSeconds) {
         this.patientVitalsService = patientVitalsService;
         this.analysisContext = analysisContext;
         this.promptBuilder = promptBuilder;
@@ -74,7 +74,7 @@ public class HealthReportService {
             String markdown = invokeLlm(prompt);
             return toHtml(markdown);
         } catch (Exception ex) {
-            log.warn("[Report] LLM 调用失败，进入降级模板渲染: {}", ex.getMessage());
+            log.warn("[Report] LLM 调用失败，进入降级模板渲染: {}", ex.toString());
             return renderFallbackHtml(request, summary, ex.getMessage());
         }
     }
