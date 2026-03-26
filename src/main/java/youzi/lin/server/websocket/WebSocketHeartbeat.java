@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.PingMessage;
-import org.springframework.web.socket.WebSocketSession;
 
 /**
  * 定时心跳任务。
@@ -19,15 +18,19 @@ public class WebSocketHeartbeat {
     private static final Logger log = LoggerFactory.getLogger(WebSocketHeartbeat.class);
 
     private final WebSocketSessionManager sessionManager;
+    private final NurseWardBroadcastService nurseWardBroadcastService;
 
-    public WebSocketHeartbeat(WebSocketSessionManager sessionManager) {
+    public WebSocketHeartbeat(WebSocketSessionManager sessionManager,
+                              NurseWardBroadcastService nurseWardBroadcastService) {
         this.sessionManager = sessionManager;
+        this.nurseWardBroadcastService = nurseWardBroadcastService;
     }
 
     @Scheduled(fixedRate = 30_000)
     public void sendPing() {
         for (var session : sessionManager.allSessions()) {
             if (!session.isOpen()) {
+                nurseWardBroadcastService.removeSession(session.getId());
                 sessionManager.remove(session.getId());
                 continue;
             }
@@ -37,6 +40,7 @@ public class WebSocketHeartbeat {
                 } catch (Exception e) {
                     log.warn("[Heartbeat] 向会话 {} 发送 Ping 失败，移除会话：{}",
                             session.getId(), e.getMessage());
+                    nurseWardBroadcastService.removeSession(session.getId());
                     sessionManager.remove(session.getId());
                 }
             }

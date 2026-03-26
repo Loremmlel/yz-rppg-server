@@ -41,6 +41,10 @@ public class WardService {
                 .toList();
     }
 
+    public boolean existsWard(String wardCode) {
+        return wardCode != null && !wardCode.isBlank() && bedRepository.existsByWardCode(wardCode);
+    }
+
     /**
      * 获取所有病区（含各病区下所有病房及床位详情）
      */

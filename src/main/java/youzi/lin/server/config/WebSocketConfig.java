@@ -1,5 +1,6 @@
 package youzi.lin.server.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -9,7 +10,10 @@ import org.springframework.web.socket.server.standard.ServletServerContainerFact
 import youzi.lin.server.grpc.GrpcFrameAnalysisClient;
 import youzi.lin.server.repository.VisitRepository;
 import youzi.lin.server.service.FrameBufferService;
+import youzi.lin.server.service.WardService;
 import youzi.lin.server.websocket.BinaryFrameWebSocketHandler;
+import youzi.lin.server.websocket.NurseStationWebSocketHandler;
+import youzi.lin.server.websocket.NurseWardBroadcastService;
 import youzi.lin.server.websocket.WebSocketSessionManager;
 
 /**
@@ -25,15 +29,21 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final FrameBufferService frameBufferService;
     private final VisitRepository visitRepository;
     private final GrpcFrameAnalysisClient grpcClient;
+    private final NurseWardBroadcastService nurseWardBroadcastService;
+    private final WardService wardService;
 
     public WebSocketConfig(WebSocketSessionManager sessionManager,
                            FrameBufferService frameBufferService,
                            VisitRepository visitRepository,
-                           GrpcFrameAnalysisClient grpcClient) {
+                           GrpcFrameAnalysisClient grpcClient,
+                           NurseWardBroadcastService nurseWardBroadcastService,
+                           WardService wardService) {
         this.sessionManager = sessionManager;
         this.frameBufferService = frameBufferService;
         this.visitRepository = visitRepository;
         this.grpcClient = grpcClient;
+        this.nurseWardBroadcastService = nurseWardBroadcastService;
+        this.wardService = wardService;
     }
 
     /**
@@ -45,6 +55,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(binaryFrameWebSocketHandler(), "/ws")
+                .setAllowedOrigins("*");
+        registry.addHandler(nurseStationWebSocketHandler(), "/ws/nurse")
                 .setAllowedOrigins("*");
     }
 
@@ -58,6 +70,16 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Bean
     public BinaryFrameWebSocketHandler binaryFrameWebSocketHandler() {
         return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService, visitRepository, grpcClient);
+    }
+
+    @Bean
+    public NurseStationWebSocketHandler nurseStationWebSocketHandler() {
+        return new NurseStationWebSocketHandler(
+                sessionManager,
+                nurseWardBroadcastService,
+                wardService,
+                new ObjectMapper()
+        );
     }
 
     /**

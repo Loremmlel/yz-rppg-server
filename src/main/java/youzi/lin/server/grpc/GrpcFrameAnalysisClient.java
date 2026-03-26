@@ -11,6 +11,7 @@ import youzi.lin.server.dto.FrameAnalysisResultDto;
 import youzi.lin.server.entity.PatientVitals;
 import youzi.lin.server.service.PatientVitalsService;
 import youzi.lin.server.websocket.VideoFrameData;
+import youzi.lin.server.websocket.NurseWardBroadcastService;
 import youzi.lin.server.websocket.WebSocketSessionManager;
 
 import io.grpc.ManagedChannel;
@@ -54,6 +55,7 @@ public class GrpcFrameAnalysisClient {
     private final FrameAnalysisServiceGrpc.FrameAnalysisServiceStub asyncStub;
     private final WebSocketSessionManager sessionManager;
     private final PatientVitalsService vitalsService;
+    private final NurseWardBroadcastService nurseWardBroadcastService;
     private final ObjectMapper objectMapper;
 
     /** per-session 写入缓冲，key = sessionId */
@@ -64,9 +66,11 @@ public class GrpcFrameAnalysisClient {
 
     public GrpcFrameAnalysisClient(GrpcChannelFactory channelFactory,
                                    WebSocketSessionManager sessionManager,
-                                   PatientVitalsService vitalsService) {
+                                   PatientVitalsService vitalsService,
+                                   NurseWardBroadcastService nurseWardBroadcastService) {
         this.sessionManager = sessionManager;
         this.vitalsService = vitalsService;
+        this.nurseWardBroadcastService = nurseWardBroadcastService;
         this.objectMapper = new ObjectMapper();
         ManagedChannel channel = channelFactory.createChannel("frame-analysis");
         this.asyncStub = FrameAnalysisServiceGrpc.newStub(channel);
@@ -109,7 +113,10 @@ public class GrpcFrameAnalysisClient {
                 // 1. 向 WebSocket 客户端推送精简心率指标（TextMessage）
                 pushHeartRateToClient(sessionId, result);
 
-                // 2. 追加到批次缓冲，条件满足时批量写入 TimescaleDB
+                // 2. 向护士站广播病区增量更新（同一患者会在微批内去重）
+                publishWardDelta(sessionId, result);
+
+                // 3. 追加到批次缓冲，条件满足时批量写入 TimescaleDB
                 bufferAndFlush(sessionId, result);
             }
 
@@ -192,6 +199,15 @@ public class GrpcFrameAnalysisClient {
                 log.error("[gRPC] 会话 {} 批量写入 TimescaleDB 失败: {}", sessionId, e.getMessage(), e);
             }
         }
+    }
+
+    private void publishWardDelta(String sessionId, FrameAnalysisResultDto result) {
+        Long bedId = sessionManager.getBedId(sessionId);
+        Long patientId = sessionManager.getPatientId(sessionId);
+        if (bedId == null || patientId == null) {
+            return;
+        }
+        nurseWardBroadcastService.publishUpdate(bedId, patientId, result.getHr(), result.getSqi(), Instant.now());
     }
 
     /**

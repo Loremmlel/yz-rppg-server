@@ -214,6 +214,23 @@ public class PatientVitalsService {
         return entity != null ? toRealtimeDTO(entity) : null;
     }
 
+    /**
+     * 护士站初始化快照：病区内每名在院患者最新 HR/SQI。
+     */
+    public List<NurseWardPatientVitalsDto> getWardLatestVitalsSnapshot(String wardCode) {
+        return repository.findWardLatestVitals(wardCode).stream()
+                .map(row -> new NurseWardPatientVitalsDto(
+                        row.getPatientId(),
+                        row.getBedId(),
+                        row.getRoomNo(),
+                        row.getBedNo(),
+                        row.getHr(),
+                        row.getSqi(),
+                        row.getEventTime()
+                ))
+                .toList();
+    }
+
     // =========================================================
     // 私有转换方法
     // =========================================================

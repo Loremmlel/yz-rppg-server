@@ -16,6 +16,8 @@ import java.util.Optional;
 @Repository
 public interface BedRepository extends JpaRepository<Bed, Long> {
 
+    boolean existsByWardCode(String wardCode);
+
     List<Bed> findByWardCode(String wardCode);
 
     List<Bed> findByStatus(BedStatus status);

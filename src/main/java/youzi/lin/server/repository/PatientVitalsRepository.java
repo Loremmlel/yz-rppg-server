@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import youzi.lin.server.dto.VitalsAggregationRow;
+import youzi.lin.server.dto.WardLatestVitalsRow;
 import youzi.lin.server.entity.PatientVitals;
 import youzi.lin.server.entity.PatientVitalsId;
 
@@ -134,5 +135,28 @@ public interface PatientVitalsRepository extends JpaRepository<PatientVitals, Pa
             LIMIT 1
             """, nativeQuery = true)
     PatientVitals findLatestByPatientId(@Param("patientId") Long patientId);
+
+    /**
+     * 查询指定病区内每名在院患者的最新 HR/SQI（单 SQL 快照）。
+     */
+    @Query(value = """
+            SELECT DISTINCT ON (v.patient_id)
+                v.patient_id          AS "patientId",
+                v.bed_id              AS "bedId",
+                b.room_no             AS "roomNo",
+                b.bed_no              AS "bedNo",
+                pv.hr                 AS "hr",
+                pv.sqi                AS "sqi",
+                pv."time"            AS "eventTime"
+            FROM visit v
+            JOIN bed b ON b.id = v.bed_id
+            LEFT JOIN patient_vitals pv
+              ON pv.patient_id = v.patient_id
+             AND pv.bed_id = v.bed_id
+            WHERE v.status = 'ADMITTED'
+              AND b.ward_code = :wardCode
+            ORDER BY v.patient_id, pv."time" DESC NULLS LAST
+            """, nativeQuery = true)
+    List<WardLatestVitalsRow> findWardLatestVitals(@Param("wardCode") String wardCode);
 }
 
