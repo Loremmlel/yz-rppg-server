@@ -24,7 +24,6 @@ import youzi.lin.server.websocket.WebSocketSessionManager;
  */
 @Configuration
 @EnableWebSocket
-@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final WebSocketSessionManager sessionManager;
