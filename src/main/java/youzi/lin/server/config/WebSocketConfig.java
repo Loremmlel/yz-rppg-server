@@ -1,6 +1,7 @@
 package youzi.lin.server.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -23,6 +24,7 @@ import youzi.lin.server.websocket.WebSocketSessionManager;
  */
 @Configuration
 @EnableWebSocket
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final WebSocketSessionManager sessionManager;

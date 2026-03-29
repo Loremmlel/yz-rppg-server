@@ -33,6 +33,9 @@ public class NurseWardBroadcastService {
     private final BedWardLookupService bedWardLookupService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** nurse 端同步链路聚合统计日志记录器。 */
+    private final StatsLogger statsLogger = new StatsLogger();
+
     /** wardCode -> 订阅该病区的 sessionId 集合 */
     private final ConcurrentHashMap<String, Set<String>> wardSubscribers = new ConcurrentHashMap<>();
     /** sessionId -> 该会话订阅的 wardCode 集合 */
@@ -66,6 +69,7 @@ public class NurseWardBroadcastService {
     public void subscribe(String sessionId, String wardCode) {
         wardSubscribers.computeIfAbsent(wardCode, _ -> ConcurrentHashMap.newKeySet()).add(sessionId);
         sessionSubscriptions.computeIfAbsent(sessionId, _ -> ConcurrentHashMap.newKeySet()).add(wardCode);
+        statsLogger.recordSubscribe();
     }
 
     public void unsubscribe(String sessionId, String wardCode) {
@@ -84,6 +88,7 @@ public class NurseWardBroadcastService {
                 sessionSubscriptions.remove(sessionId, wards);
             }
         }
+        statsLogger.recordUnsubscribe();
     }
 
     public void removeSession(String sessionId) {
@@ -119,6 +124,7 @@ public class NurseWardBroadcastService {
 
         var pending = pendingByWard.computeIfAbsent(wardCode, _ -> new ConcurrentHashMap<>());
         pending.put(patientId, new PendingUpdate(patientId, bedId, hr, sqi, eventTime, seq.incrementAndGet()));
+        statsLogger.recordUpdateQueued();
     }
 
     public void sendSnapshot(String sessionId, String wardCode) {
@@ -153,7 +159,9 @@ public class NurseWardBroadcastService {
             }
         }
 
-        sendJson(sessionId, msg);
+        if (sendJson(sessionId, msg)) {
+            statsLogger.recordSnapshotSent();
+        }
     }
 
     private void flushBatches() {
@@ -213,28 +221,112 @@ public class NurseWardBroadcastService {
             try {
                 text = objectMapper.writeValueAsString(msg);
             } catch (Exception e) {
+                statsLogger.recordSerializationError();
                 log.error("[NurseWS] 序列化病区 {} 增量更新失败: {}", wardCode, e.getMessage(), e);
                 continue;
             }
 
+            statsLogger.recordBatchPrepared(updates.size());
             for (var sessionId : sessions) {
                 boolean sent = sessionManager.sendTextMessage(sessionId, text);
                 if (!sent) {
+                    statsLogger.recordSendFailure();
                     log.debug("[NurseWS] 会话 {} 不可写，移除订阅", sessionId);
                     removeSession(sessionId);
+                } else {
+                    statsLogger.recordBatchSent();
                 }
             }
         }
     }
 
-    private void sendJson(String sessionId, ObjectNode payload) {
+    private boolean sendJson(String sessionId, ObjectNode payload) {
         try {
             boolean sent = sessionManager.sendTextMessage(sessionId, objectMapper.writeValueAsString(payload));
             if (!sent) {
+                statsLogger.recordSendFailure();
                 removeSession(sessionId);
             }
+            return sent;
         } catch (Exception e) {
+            statsLogger.recordSerializationError();
             log.error("[NurseWS] 会话 {} 发送 JSON 失败: {}", sessionId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 聚合统计日志记录器：封装护士站同步链路计数器、定时调度和打印逻辑。
+     */
+    private static final class StatsLogger {
+
+        private static final long INTERVAL_SECONDS = 30;
+
+        private final AtomicLong subscribeRequests = new AtomicLong();
+        private final AtomicLong unsubscribeRequests = new AtomicLong();
+        private final AtomicLong snapshotSent = new AtomicLong();
+        private final AtomicLong updatesQueued = new AtomicLong();
+        private final AtomicLong batchesPrepared = new AtomicLong();
+        private final AtomicLong updatesInBatch = new AtomicLong();
+        private final AtomicLong batchSent = new AtomicLong();
+        private final AtomicLong sendFailures = new AtomicLong();
+        private final AtomicLong serializationErrors = new AtomicLong();
+
+        @SuppressWarnings("FieldCanBeLocal")
+        private final ScheduledExecutorService scheduler =
+                Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "nurse-ws-stats-logger");
+                    t.setDaemon(true);
+                    return t;
+                });
+
+        StatsLogger() {
+            scheduler.scheduleAtFixedRate(
+                    this::printAndReset,
+                    INTERVAL_SECONDS,
+                    INTERVAL_SECONDS,
+                    TimeUnit.SECONDS
+            );
+        }
+
+        void recordSubscribe() { subscribeRequests.incrementAndGet(); }
+        void recordUnsubscribe() { unsubscribeRequests.incrementAndGet(); }
+        void recordSnapshotSent() { snapshotSent.incrementAndGet(); }
+        void recordUpdateQueued() { updatesQueued.incrementAndGet(); }
+        void recordBatchPrepared(int updateCount) {
+            batchesPrepared.incrementAndGet();
+            updatesInBatch.addAndGet(updateCount);
+        }
+        void recordBatchSent() { batchSent.incrementAndGet(); }
+        void recordSendFailure() { sendFailures.incrementAndGet(); }
+        void recordSerializationError() { serializationErrors.incrementAndGet(); }
+
+        private void printAndReset() {
+            long subscribe = subscribeRequests.getAndSet(0);
+            long unsubscribe = unsubscribeRequests.getAndSet(0);
+            long snapshots = snapshotSent.getAndSet(0);
+            long queued = updatesQueued.getAndSet(0);
+            long prepared = batchesPrepared.getAndSet(0);
+            long updates = updatesInBatch.getAndSet(0);
+            long sent = batchSent.getAndSet(0);
+            long sendFail = sendFailures.getAndSet(0);
+            long serializeErr = serializationErrors.getAndSet(0);
+
+            if (subscribe == 0
+                    && unsubscribe == 0
+                    && snapshots == 0
+                    && queued == 0
+                    && prepared == 0
+                    && sent == 0
+                    && sendFail == 0
+                    && serializeErr == 0) {
+                return;
+            }
+
+            log.info("[NurseWS 统计] 过去 {}s：订阅 {}，取消订阅 {}，快照发送 {}，入队更新 {}，"
+                            + "组包批次 {}（共 {} 条更新），下发成功 {}，发送失败 {}，序列化失败 {}",
+                    INTERVAL_SECONDS, subscribe, unsubscribe, snapshots, queued,
+                    prepared, updates, sent, sendFail, serializeErr);
         }
     }
 
