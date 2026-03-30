@@ -4,13 +4,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.BinaryMessage;
+import org.springframework.web.socket.PingMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 线程安全的 WebSocket 会话管理器。
@@ -24,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </p>
  */
 @Component
+@SuppressWarnings("unused")
 public class WebSocketSessionManager {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketSessionManager.class);
@@ -39,6 +43,12 @@ public class WebSocketSessionManager {
     /** sessionId → patientId（当前在床患者，可能为 null） */
     private final ConcurrentHashMap<String, Long> sessionPatientMap = new ConcurrentHashMap<>();
 
+    /** sessionId → 最近一次收到客户端消息的时间戳（毫秒） */
+    private final ConcurrentHashMap<String, Long> sessionLastClientMessageAt = new ConcurrentHashMap<>();
+
+    /** sessionId → 连续心跳未响应次数 */
+    private final ConcurrentHashMap<String, AtomicInteger> sessionMissedPingCount = new ConcurrentHashMap<>();
+
     /**
      * 注册会话并绑定床位 ID 和患者 ID。
      *
@@ -48,6 +58,7 @@ public class WebSocketSessionManager {
      */
     public void register(WebSocketSession session, Long bedId, Long patientId) {
         sessions.put(session.getId(), session);
+        markClientActivity(session.getId());
 
         if (bedId != null) {
             // 若该床位已有旧会话，先清除旧映射，防止 bedSessionMap 中残留过期 sessionId
@@ -55,6 +66,8 @@ public class WebSocketSessionManager {
             if (oldSessionId != null && !oldSessionId.equals(session.getId())) {
                 sessionBedMap.remove(oldSessionId);
                 sessionPatientMap.remove(oldSessionId);
+                sessionLastClientMessageAt.remove(oldSessionId);
+                sessionMissedPingCount.remove(oldSessionId);
                 log.info("[SessionManager] 床位 {} 的旧会话 {} 已被新会话 {} 替代",
                         bedId, oldSessionId, session.getId());
             }
@@ -84,6 +97,36 @@ public class WebSocketSessionManager {
         }
 
         sessionPatientMap.remove(sessionId);
+        sessionLastClientMessageAt.remove(sessionId);
+        sessionMissedPingCount.remove(sessionId);
+    }
+
+    /**
+     * 标记会话收到客户端消息，刷新最近活跃时间并重置未响应计数。
+     */
+    public void markClientActivity(String sessionId) {
+        sessionLastClientMessageAt.put(sessionId, Instant.now().toEpochMilli());
+        sessionMissedPingCount.putIfAbsent(sessionId, new AtomicInteger(0));
+        var counter = sessionMissedPingCount.get(sessionId);
+        if (counter != null) {
+            counter.set(0);
+        }
+    }
+
+    /**
+     * 获取会话最近一次客户端消息时间戳（毫秒）。
+     */
+    public Long getLastClientMessageAt(String sessionId) {
+        return sessionLastClientMessageAt.get(sessionId);
+    }
+
+    /**
+     * 连续心跳未响应计数 +1，并返回最新计数。
+     */
+    public int incrementMissedPingCount(String sessionId) {
+        sessionMissedPingCount.putIfAbsent(sessionId, new AtomicInteger(0));
+        var counter = sessionMissedPingCount.get(sessionId);
+        return counter != null ? counter.incrementAndGet() : 0;
     }
 
     /**
@@ -96,6 +139,7 @@ public class WebSocketSessionManager {
     /**
      * 根据床位 ID 获取当前活跃的 WebSocket 会话。
      */
+    @SuppressWarnings("unused")
     public WebSocketSession getByBedId(Long bedId) {
         String sessionId = bedSessionMap.get(bedId);
         return sessionId != null ? sessions.get(sessionId) : null;
@@ -127,6 +171,7 @@ public class WebSocketSessionManager {
     /**
      * 获取所有 sessionId → bedId 的快照（只读），用于调试 / 监控。
      */
+    @SuppressWarnings("unused")
     public Map<String, Long> allSessionBedMappings() {
         return Map.copyOf(sessionBedMap);
     }
@@ -154,6 +199,7 @@ public class WebSocketSessionManager {
      * 向指定会话发送二进制消息。
      * 对同一 session 的 sendMessage 加锁，避免并发写入导致异常。
      */
+    @SuppressWarnings("unused")
     public boolean sendBinaryMessage(String sessionId, byte[] data) {
         var session = sessions.get(sessionId);
         if (session == null || !session.isOpen()) {
@@ -162,6 +208,25 @@ public class WebSocketSessionManager {
         synchronized (session) {
             try {
                 session.sendMessage(new BinaryMessage(data));
+                return true;
+            } catch (IOException e) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * 向指定会话发送 Ping 帧。
+     * 对同一 session 的 sendMessage 加锁，避免并发写入导致异常。
+     */
+    public boolean sendPingMessage(String sessionId) {
+        var session = sessions.get(sessionId);
+        if (session == null || !session.isOpen()) {
+            return false;
+        }
+        synchronized (session) {
+            try {
+                session.sendMessage(new PingMessage());
                 return true;
             } catch (IOException e) {
                 return false;

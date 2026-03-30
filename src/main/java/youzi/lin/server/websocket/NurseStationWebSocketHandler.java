@@ -6,6 +6,7 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PongMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -44,6 +45,7 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) {
         String sessionId = session.getId();
+        sessionManager.markClientActivity(sessionId);
 
         JsonNode root;
         try {
@@ -66,6 +68,11 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
             case "ping" -> sendPong(sessionId, root.path("ts").asLong(System.currentTimeMillis()));
             default -> sendError(sessionId, requestId, "UNSUPPORTED_TYPE", "不支持的消息类型: " + type);
         }
+    }
+
+    @Override
+    protected void handlePongMessage(@NonNull WebSocketSession session, @NonNull PongMessage message) {
+        sessionManager.markClientActivity(session.getId());
     }
 
     @Override

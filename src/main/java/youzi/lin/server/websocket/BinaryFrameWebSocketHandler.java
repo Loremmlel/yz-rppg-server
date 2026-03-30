@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.PongMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -53,8 +54,14 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
 
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+        sessionManager.markClientActivity(session.getId());
         var payload = message.getPayload().array();
         frameBufferService.addFrame(session.getId(), payload);
+    }
+
+    @Override
+    protected void handlePongMessage(@NonNull WebSocketSession session, @NonNull PongMessage message) {
+        sessionManager.markClientActivity(session.getId());
     }
 
     @Override
