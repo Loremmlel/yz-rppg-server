@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
+import youzi.lin.server.service.AlarmService;
 
 /**
  * 定时心跳任务。
@@ -22,11 +23,14 @@ public class WebSocketHeartbeat {
 
     private final WebSocketSessionManager sessionManager;
     private final NurseWardBroadcastService nurseWardBroadcastService;
+    private final AlarmService alarmService;
 
     public WebSocketHeartbeat(WebSocketSessionManager sessionManager,
-                              NurseWardBroadcastService nurseWardBroadcastService) {
+                              NurseWardBroadcastService nurseWardBroadcastService,
+                              AlarmService alarmService) {
         this.sessionManager = sessionManager;
         this.nurseWardBroadcastService = nurseWardBroadcastService;
+        this.alarmService = alarmService;
     }
 
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MS)
@@ -71,6 +75,9 @@ public class WebSocketHeartbeat {
     }
 
     private void cleanupSession(WebSocketSession session) {
+        Long bedId = sessionManager.getBedId(session.getId());
+        Long patientId = sessionManager.getPatientId(session.getId());
+        alarmService.onSessionDisconnected(bedId, patientId);
         nurseWardBroadcastService.removeSession(session.getId());
         sessionManager.remove(session.getId());
     }

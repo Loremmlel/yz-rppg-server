@@ -7,6 +7,8 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import youzi.lin.server.enums.AlarmStatus;
+import youzi.lin.server.enums.AlarmType;
 import youzi.lin.server.service.BedWardLookupService;
 import youzi.lin.server.service.PatientVitalsService;
 
@@ -22,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 护士站病区广播服务：维护订阅关系、快照与增量推送。
  */
 @Service
-public class NurseWardBroadcastService {
+public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(NurseWardBroadcastService.class);
 
@@ -164,6 +166,70 @@ public class NurseWardBroadcastService {
         }
     }
 
+    @Override
+    public void publishAlarm(Long bedId,
+                             Long patientId,
+                             AlarmType alarmType,
+                             AlarmStatus status,
+                             String message,
+                             Instant eventTime,
+                             Long alarmEventId) {
+        if (bedId == null || alarmType == null || status == null) {
+            return;
+        }
+
+        var wardCode = bedWardLookupService.getWardCodeByBedId(bedId);
+        if (wardCode == null) {
+            return;
+        }
+
+        var sessions = wardSubscribers.get(wardCode);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+
+        ObjectNode msg = objectMapper.createObjectNode();
+        msg.put("type", status == AlarmStatus.ACTIVE ? "alarm.trigger" : "alarm.resolve");
+        msg.put("wardCode", wardCode);
+        msg.put("bedId", bedId);
+        if (patientId != null) {
+            msg.put("patientId", patientId);
+        } else {
+            msg.putNull("patientId");
+        }
+        msg.put("alarmType", alarmType.name());
+        msg.put("status", status.name());
+        msg.put("message", message != null ? message : "");
+        msg.put("timestamp", (eventTime != null ? eventTime : Instant.now()).toString());
+        if (alarmEventId != null) {
+            msg.put("alarmEventId", alarmEventId);
+        } else {
+            msg.putNull("alarmEventId");
+        }
+
+        String text;
+        try {
+            text = objectMapper.writeValueAsString(msg);
+        } catch (Exception e) {
+            statsLogger.recordSerializationError();
+            log.error("[NurseWS] 序列化报警消息失败 bedId={}, type={}, err={}",
+                    bedId, alarmType, e.getMessage(), e);
+            return;
+        }
+
+        statsLogger.recordAlarmPrepared(status == AlarmStatus.ACTIVE);
+        for (var sessionId : sessions) {
+            boolean sent = sessionManager.sendTextMessage(sessionId, text);
+            if (!sent) {
+                statsLogger.recordSendFailure();
+                log.debug("[NurseWS] 会话 {} 不可写，移除订阅", sessionId);
+                removeSession(sessionId);
+            } else {
+                statsLogger.recordAlarmSent(status == AlarmStatus.ACTIVE);
+            }
+        }
+    }
+
     private void flushBatches() {
         for (var entry : pendingByWard.entrySet()) {
             var wardCode = entry.getKey();
@@ -269,6 +335,10 @@ public class NurseWardBroadcastService {
         private final AtomicLong batchesPrepared = new AtomicLong();
         private final AtomicLong updatesInBatch = new AtomicLong();
         private final AtomicLong batchSent = new AtomicLong();
+        private final AtomicLong alarmsPreparedTrigger = new AtomicLong();
+        private final AtomicLong alarmsPreparedResolve = new AtomicLong();
+        private final AtomicLong alarmsSentTrigger = new AtomicLong();
+        private final AtomicLong alarmsSentResolve = new AtomicLong();
         private final AtomicLong sendFailures = new AtomicLong();
         private final AtomicLong serializationErrors = new AtomicLong();
 
@@ -298,6 +368,20 @@ public class NurseWardBroadcastService {
             updatesInBatch.addAndGet(updateCount);
         }
         void recordBatchSent() { batchSent.incrementAndGet(); }
+        void recordAlarmPrepared(boolean trigger) {
+            if (trigger) {
+                alarmsPreparedTrigger.incrementAndGet();
+            } else {
+                alarmsPreparedResolve.incrementAndGet();
+            }
+        }
+        void recordAlarmSent(boolean trigger) {
+            if (trigger) {
+                alarmsSentTrigger.incrementAndGet();
+            } else {
+                alarmsSentResolve.incrementAndGet();
+            }
+        }
         void recordSendFailure() { sendFailures.incrementAndGet(); }
         void recordSerializationError() { serializationErrors.incrementAndGet(); }
 
@@ -309,6 +393,10 @@ public class NurseWardBroadcastService {
             long prepared = batchesPrepared.getAndSet(0);
             long updates = updatesInBatch.getAndSet(0);
             long sent = batchSent.getAndSet(0);
+            long alarmPreparedTrigger = alarmsPreparedTrigger.getAndSet(0);
+            long alarmPreparedResolve = alarmsPreparedResolve.getAndSet(0);
+            long alarmSentTrigger = alarmsSentTrigger.getAndSet(0);
+            long alarmSentResolve = alarmsSentResolve.getAndSet(0);
             long sendFail = sendFailures.getAndSet(0);
             long serializeErr = serializationErrors.getAndSet(0);
 
@@ -318,15 +406,23 @@ public class NurseWardBroadcastService {
                     && queued == 0
                     && prepared == 0
                     && sent == 0
+                    && alarmPreparedTrigger == 0
+                    && alarmPreparedResolve == 0
+                    && alarmSentTrigger == 0
+                    && alarmSentResolve == 0
                     && sendFail == 0
                     && serializeErr == 0) {
                 return;
             }
 
             log.info("[NurseWS 统计] 过去 {}s：订阅 {}，取消订阅 {}，快照发送 {}，入队更新 {}，"
-                            + "组包批次 {}（共 {} 条更新），下发成功 {}，发送失败 {}，序列化失败 {}",
+                            + "组包批次 {}（共 {} 条更新），下发成功 {}，报警触发组包 {}，报警解除组包 {}，"
+                            + "报警触发下发 {}，报警解除下发 {}，发送失败 {}，序列化失败 {}",
                     INTERVAL_SECONDS, subscribe, unsubscribe, snapshots, queued,
-                    prepared, updates, sent, sendFail, serializeErr);
+                    prepared, updates, sent,
+                    alarmPreparedTrigger, alarmPreparedResolve,
+                    alarmSentTrigger, alarmSentResolve,
+                    sendFail, serializeErr);
         }
     }
 

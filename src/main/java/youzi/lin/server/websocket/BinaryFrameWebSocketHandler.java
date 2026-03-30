@@ -12,6 +12,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import youzi.lin.server.grpc.GrpcFrameAnalysisClient;
 import youzi.lin.server.enums.VisitStatus;
 import youzi.lin.server.repository.VisitRepository;
+import youzi.lin.server.service.AlarmService;
 import youzi.lin.server.service.FrameBufferService;
 
 /**
@@ -32,15 +33,18 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     private final FrameBufferService frameBufferService;
     private final VisitRepository visitRepository;
     private final GrpcFrameAnalysisClient grpcClient;
+    private final AlarmService alarmService;
 
     public BinaryFrameWebSocketHandler(WebSocketSessionManager sessionManager,
                                        FrameBufferService frameBufferService,
                                        VisitRepository visitRepository,
-                                       GrpcFrameAnalysisClient grpcClient) {
+                                       GrpcFrameAnalysisClient grpcClient,
+                                       AlarmService alarmService) {
         this.sessionManager = sessionManager;
         this.frameBufferService = frameBufferService;
         this.visitRepository = visitRepository;
         this.grpcClient = grpcClient;
+        this.alarmService = alarmService;
     }
 
     @Override
@@ -48,6 +52,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
         var bedId = extractBedId(session);
         var patientId = resolvePatientId(bedId, session.getId());
         sessionManager.register(session, bedId, patientId);
+        alarmService.onSessionConnected(bedId, patientId);
         log.info("[WebSocket] 客户端已连接：{}，远程地址：{}，床位ID：{}，患者ID：{}",
                 session.getId(), session.getRemoteAddress(), bedId, patientId);
     }
@@ -67,8 +72,11 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) {
         var sessionId = session.getId();
+        var bedId = sessionManager.getBedId(sessionId);
+        var patientId = sessionManager.getPatientId(sessionId);
         // 先刷盘剩余分析结果，再清理会话状态
         grpcClient.flushAndRemoveSession(sessionId);
+        alarmService.onSessionDisconnected(bedId, patientId);
         sessionManager.remove(sessionId);
         frameBufferService.removeSession(sessionId);
         log.info("[WebSocket] 客户端已断开：{}，状态：{}", sessionId, status);
@@ -77,8 +85,11 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         var sessionId = session.getId();
+        var bedId = sessionManager.getBedId(sessionId);
+        var patientId = sessionManager.getPatientId(sessionId);
         log.error("[WebSocket] 传输错误，会话：{}，原因：{}", sessionId, exception.getMessage());
         grpcClient.flushAndRemoveSession(sessionId);
+        alarmService.onSessionDisconnected(bedId, patientId);
         sessionManager.remove(sessionId);
         frameBufferService.removeSession(sessionId);
         try {

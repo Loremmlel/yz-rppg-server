@@ -9,6 +9,7 @@ import org.springframework.grpc.client.GrpcChannelFactory;
 import org.springframework.stereotype.Component;
 import youzi.lin.server.dto.FrameAnalysisResultDto;
 import youzi.lin.server.entity.PatientVitals;
+import youzi.lin.server.service.AlarmService;
 import youzi.lin.server.service.PatientVitalsService;
 import youzi.lin.server.websocket.VideoFrameData;
 import youzi.lin.server.websocket.NurseWardBroadcastService;
@@ -55,6 +56,7 @@ public class GrpcFrameAnalysisClient {
     private final FrameAnalysisServiceGrpc.FrameAnalysisServiceStub asyncStub;
     private final WebSocketSessionManager sessionManager;
     private final PatientVitalsService vitalsService;
+    private final AlarmService alarmService;
     private final NurseWardBroadcastService nurseWardBroadcastService;
     private final ObjectMapper objectMapper;
 
@@ -67,9 +69,11 @@ public class GrpcFrameAnalysisClient {
     public GrpcFrameAnalysisClient(GrpcChannelFactory channelFactory,
                                    WebSocketSessionManager sessionManager,
                                    PatientVitalsService vitalsService,
+                                   AlarmService alarmService,
                                    NurseWardBroadcastService nurseWardBroadcastService) {
         this.sessionManager = sessionManager;
         this.vitalsService = vitalsService;
+        this.alarmService = alarmService;
         this.nurseWardBroadcastService = nurseWardBroadcastService;
         this.objectMapper = new ObjectMapper();
         ManagedChannel channel = channelFactory.createChannel("frame-analysis");
@@ -116,7 +120,10 @@ public class GrpcFrameAnalysisClient {
                 // 2. 向护士站广播病区增量更新（同一患者会在微批内去重）
                 publishWardDelta(sessionId, result);
 
-                // 3. 追加到批次缓冲，条件满足时批量写入 TimescaleDB
+                // 3. 判定并下发报警事件（含持续时长防抖）
+                evaluateAlarms(sessionId, result);
+
+                // 4. 追加到批次缓冲，条件满足时批量写入 TimescaleDB
                 bufferAndFlush(sessionId, result);
             }
 
@@ -208,6 +215,15 @@ public class GrpcFrameAnalysisClient {
             return;
         }
         nurseWardBroadcastService.publishUpdate(bedId, patientId, result.getHr(), result.getSqi(), Instant.now());
+    }
+
+    private void evaluateAlarms(String sessionId, FrameAnalysisResultDto result) {
+        Long bedId = sessionManager.getBedId(sessionId);
+        Long patientId = sessionManager.getPatientId(sessionId);
+        if (bedId == null) {
+            return;
+        }
+        alarmService.evaluateVitals(bedId, patientId, result.getHr(), result.getSqi(), Instant.now());
     }
 
     /**

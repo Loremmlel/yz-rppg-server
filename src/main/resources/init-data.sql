@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS visit CASCADE;
 DROP TABLE IF EXISTS patient CASCADE;
 DROP TABLE IF EXISTS bed CASCADE;
+DROP TABLE IF EXISTS alarm_event CASCADE;
 
 -- =============================================
 -- 建表（如果不存在）— 唯一约束内联，保证幂等
@@ -36,6 +37,23 @@ CREATE TABLE IF NOT EXISTS visit
     status          VARCHAR(16)  NOT NULL,
     UNIQUE (patient_id, bed_id, admission_time)
 );
+
+CREATE TABLE IF NOT EXISTS alarm_event
+(
+    id            BIGSERIAL PRIMARY KEY,
+    patient_id    BIGINT,
+    bed_id        BIGINT        NOT NULL,
+    alarm_type    VARCHAR(32)   NOT NULL,
+    status        VARCHAR(16)   NOT NULL,
+    trigger_time  TIMESTAMPTZ   NOT NULL,
+    resolve_time  TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS ix_alarm_event_bed_type_status
+    ON alarm_event (bed_id, alarm_type, status);
+
+CREATE INDEX IF NOT EXISTS ix_alarm_event_patient_trigger_time
+    ON alarm_event (patient_id, trigger_time DESC);
 
 -- =============================================
 -- 插入模拟数据（幂等）

@@ -1,7 +1,6 @@
 package youzi.lin.server.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -10,6 +9,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
 import youzi.lin.server.grpc.GrpcFrameAnalysisClient;
 import youzi.lin.server.repository.VisitRepository;
+import youzi.lin.server.service.AlarmService;
 import youzi.lin.server.service.FrameBufferService;
 import youzi.lin.server.service.WardService;
 import youzi.lin.server.websocket.BinaryFrameWebSocketHandler;
@@ -30,6 +30,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final FrameBufferService frameBufferService;
     private final VisitRepository visitRepository;
     private final GrpcFrameAnalysisClient grpcClient;
+    private final AlarmService alarmService;
     private final NurseWardBroadcastService nurseWardBroadcastService;
     private final WardService wardService;
 
@@ -37,12 +38,14 @@ public class WebSocketConfig implements WebSocketConfigurer {
                            FrameBufferService frameBufferService,
                            VisitRepository visitRepository,
                            GrpcFrameAnalysisClient grpcClient,
+                           AlarmService alarmService,
                            NurseWardBroadcastService nurseWardBroadcastService,
                            WardService wardService) {
         this.sessionManager = sessionManager;
         this.frameBufferService = frameBufferService;
         this.visitRepository = visitRepository;
         this.grpcClient = grpcClient;
+        this.alarmService = alarmService;
         this.nurseWardBroadcastService = nurseWardBroadcastService;
         this.wardService = wardService;
     }
@@ -70,7 +73,13 @@ public class WebSocketConfig implements WebSocketConfigurer {
      */
     @Bean
     public BinaryFrameWebSocketHandler binaryFrameWebSocketHandler() {
-        return new BinaryFrameWebSocketHandler(sessionManager, frameBufferService, visitRepository, grpcClient);
+        return new BinaryFrameWebSocketHandler(
+                sessionManager,
+                frameBufferService,
+                visitRepository,
+                grpcClient,
+                alarmService
+        );
     }
 
     @Bean
