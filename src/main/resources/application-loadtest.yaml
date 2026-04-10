@@ -1,0 +1,12 @@
+app:
+  loadtest:
+    grpc-mock:
+      enabled: true
+      min-latency-ms: 2
+      max-latency-ms: 10
+    nurse-pump:
+      enabled: true
+      ward-code: 内科一区
+      patients-per-tick: 16
+      interval-ms: 50
+

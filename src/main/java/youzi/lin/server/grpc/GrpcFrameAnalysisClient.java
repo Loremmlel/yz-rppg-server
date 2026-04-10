@@ -3,10 +3,12 @@ package youzi.lin.server.grpc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.grpc.client.GrpcChannelFactory;
 import org.springframework.stereotype.Component;
+import youzi.lin.server.config.LoadTestProperties;
 import youzi.lin.server.dto.FrameAnalysisResultDto;
 import youzi.lin.server.entity.PatientVitals;
 import youzi.lin.server.service.AlarmService;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -59,6 +62,16 @@ public class GrpcFrameAnalysisClient {
     private final AlarmService alarmService;
     private final NurseWardBroadcastService nurseWardBroadcastService;
     private final ObjectMapper objectMapper;
+    private final LoadTestProperties loadTestProperties;
+
+    private final ScheduledExecutorService mockScheduler = Executors.newScheduledThreadPool(
+            Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
+            r -> {
+                var t = new Thread(r, "mock-grpc-analysis");
+                t.setDaemon(true);
+                return t;
+            }
+    );
 
     /** per-session 写入缓冲，key = sessionId */
     private final ConcurrentHashMap<String, SessionBuffer> buffers = new ConcurrentHashMap<>();
@@ -70,11 +83,13 @@ public class GrpcFrameAnalysisClient {
                                    WebSocketSessionManager sessionManager,
                                    PatientVitalsService vitalsService,
                                    AlarmService alarmService,
-                                   NurseWardBroadcastService nurseWardBroadcastService) {
+                                   NurseWardBroadcastService nurseWardBroadcastService,
+                                   LoadTestProperties loadTestProperties) {
         this.sessionManager = sessionManager;
         this.vitalsService = vitalsService;
         this.alarmService = alarmService;
         this.nurseWardBroadcastService = nurseWardBroadcastService;
+        this.loadTestProperties = loadTestProperties;
         this.objectMapper = new ObjectMapper();
         ManagedChannel channel = channelFactory.createChannel("frame-analysis");
         this.asyncStub = FrameAnalysisServiceGrpc.newStub(channel);
@@ -87,6 +102,11 @@ public class GrpcFrameAnalysisClient {
      * @param frames    本批次的帧数据（通常 30 帧）
      */
     public void analyzeFramesAsync(String sessionId, List<VideoFrameData> frames) {
+        if (loadTestProperties.getGrpcMock().isEnabled()) {
+            analyzeFramesWithMock(sessionId, frames);
+            return;
+        }
+
         var requestBuilder = FrameBatchRequest.newBuilder().setSessionId(sessionId);
         for (var frame : frames) {
             requestBuilder.addFrames(
@@ -111,20 +131,7 @@ public class GrpcFrameAnalysisClient {
                     log.error("[gRPC] 会话 {} 解析分析结果失败: {}", sessionId, e.getMessage(), e);
                     return;
                 }
-
-                statsLogger.recordResultReceived();
-
-                // 1. 向 WebSocket 客户端推送精简心率指标（TextMessage）
-                pushHeartRateToClient(sessionId, result);
-
-                // 2. 向护士站广播病区增量更新（同一患者会在微批内去重）
-                publishWardDelta(sessionId, result);
-
-                // 3. 判定并下发报警事件（含持续时长防抖）
-                evaluateAlarms(sessionId, result);
-
-                // 4. 追加到批次缓冲，条件满足时批量写入 TimescaleDB
-                bufferAndFlush(sessionId, result);
+                processAnalysisResult(sessionId, result);
             }
 
             @Override
@@ -139,6 +146,11 @@ public class GrpcFrameAnalysisClient {
                 log.debug("[gRPC] 会话 {} 分析调用完成", sessionId);
             }
         });
+    }
+
+    @PreDestroy
+    void shutdownMockScheduler() {
+        mockScheduler.shutdownNow();
     }
 
     /**
@@ -159,6 +171,65 @@ public class GrpcFrameAnalysisClient {
     }
 
     // ── 私有方法 ──────────────────────────────────────────────
+
+    private void analyzeFramesWithMock(String sessionId, List<VideoFrameData> frames) {
+        if (frames == null || frames.isEmpty()) {
+            return;
+        }
+        int minDelay = Math.max(0, loadTestProperties.getGrpcMock().getMinLatencyMs());
+        int maxDelay = Math.max(minDelay, loadTestProperties.getGrpcMock().getMaxLatencyMs());
+        int delayMs = ThreadLocalRandom.current().nextInt(minDelay, maxDelay + 1);
+
+        mockScheduler.schedule(
+                () -> processAnalysisResult(sessionId, buildMockResult()),
+                delayMs,
+                TimeUnit.MILLISECONDS
+        );
+    }
+
+    private FrameAnalysisResultDto buildMockResult() {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        FrameAnalysisResultDto result = new FrameAnalysisResultDto();
+
+        double hr = random.nextDouble(55.0, 120.0);
+        double sqi = random.nextDouble(0.35, 1.0);
+        result.setHr(hr);
+        result.setSqi(sqi);
+        result.setLatency((double) random.nextLong(8, 25));
+
+        if (sqi >= 0.5d) {
+            FrameAnalysisResultDto.HrvData hrv = new FrameAnalysisResultDto.HrvData();
+            hrv.setBpm(hr);
+            hrv.setIbi(60_000.0d / hr);
+            hrv.setSdnn(random.nextDouble(20.0, 80.0));
+            hrv.setSdsd(random.nextDouble(10.0, 40.0));
+            hrv.setRmssd(random.nextDouble(10.0, 60.0));
+            hrv.setPnn20(random.nextDouble(0.0, 90.0));
+            hrv.setPnn50(random.nextDouble(0.0, 70.0));
+            hrv.setHrMad(random.nextDouble(2.0, 20.0));
+            hrv.setSd1(random.nextDouble(5.0, 40.0));
+            hrv.setSd2(random.nextDouble(10.0, 80.0));
+            hrv.setS(random.nextDouble(50.0, 2000.0));
+            hrv.setSd1Sd2(random.nextDouble(0.2, 1.2));
+            hrv.setBreathingRate(random.nextDouble(8.0, 24.0));
+            hrv.setVlf(random.nextDouble(10.0, 250.0));
+            hrv.setTp(random.nextDouble(100.0, 2000.0));
+            hrv.setHf(random.nextDouble(30.0, 800.0));
+            hrv.setLf(random.nextDouble(30.0, 1200.0));
+            hrv.setLfHf(random.nextDouble(0.2, 4.0));
+            result.setHrv(hrv);
+        }
+
+        return result;
+    }
+
+    private void processAnalysisResult(String sessionId, FrameAnalysisResultDto result) {
+        statsLogger.recordResultReceived();
+        pushHeartRateToClient(sessionId, result);
+        publishWardDelta(sessionId, result);
+        evaluateAlarms(sessionId, result);
+        bufferAndFlush(sessionId, result);
+    }
 
     /**
      * 将当前分析结果追加到 per-session 缓冲；
