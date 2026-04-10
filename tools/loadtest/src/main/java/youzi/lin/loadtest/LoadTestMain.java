@@ -111,7 +111,12 @@ public final class LoadTestMain {
                     }
                     long remain = intervalNs - (System.nanoTime() - beginNs);
                     if (remain > 0) {
-                        TimeUnit.NANOSECONDS.sleep(remain);
+                        try {
+                            TimeUnit.NANOSECONDS.sleep(remain);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
                 }
             });
