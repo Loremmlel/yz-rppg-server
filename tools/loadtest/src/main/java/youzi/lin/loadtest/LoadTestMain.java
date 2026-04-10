@@ -47,8 +47,16 @@ public final class LoadTestMain {
         Map<String, String> options = CliOptions.parse(args);
 
         switch (scenario) {
-            case "bedside" -> runBedside(options);
-            case "nurse" -> runNurse(options);
+            case "bedside" -> {
+                WsResult result = runBedside(options);
+                printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+            }
+            case "nurse" -> {
+                WsResult result = runNurse(options);
+                printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+            }
+            case "bedside-matrix" -> runBedsideMatrix(options);
+            case "nurse-matrix" -> runNurseMatrix(options);
             case "db" -> runDbMixed(options);
             default -> {
                 System.out.println("Unknown scenario: " + scenario);
@@ -57,7 +65,7 @@ public final class LoadTestMain {
         }
     }
 
-    private static void runBedside(Map<String, String> options) throws Exception {
+    private static WsResult runBedside(Map<String, String> options) throws Exception {
         String baseUrl = CliOptions.get(options, "baseUrl", "ws://localhost:8080");
         int beds = CliOptions.getInt(options, "beds", 64);
         int fps = CliOptions.getInt(options, "fps", 15);
@@ -127,10 +135,10 @@ public final class LoadTestMain {
             }
         }
 
-        printWsResult("bedside", beds, measureSec, metrics);
+        return new WsResult("bedside", beds, measureSec, metrics.snapshot());
     }
 
-    private static void runNurse(Map<String, String> options) throws Exception {
+    private static WsResult runNurse(Map<String, String> options) throws Exception {
         String baseUrl = CliOptions.get(options, "baseUrl", "ws://localhost:8080");
         String wardCode = CliOptions.get(options, "wardCode", "内科一区");
         int stations = CliOptions.getInt(options, "stations", 300);
@@ -167,7 +175,51 @@ public final class LoadTestMain {
             }
         }
 
-        printWsResult("nurse", stations, measureSec, metrics);
+        return new WsResult("nurse", stations, measureSec, metrics.snapshot());
+    }
+
+    private static void runBedsideMatrix(Map<String, String> options) throws Exception {
+        List<Integer> levels = CliOptions.getIntList(options, "bedsLevels", "16,32,64,128,256");
+        String outputCsv = CliOptions.get(options, "outputCsv", ".\\results\\bedside-matrix.csv");
+        String outputMd = CliOptions.get(options, "outputMd", ".\\results\\bedside-matrix.md");
+
+        List<String> rows = new ArrayList<>();
+        rows.add("beds,sent,recv,errors,send_rate,recv_rate,send_p95_ms,send_p99_ms,recv_p95_ms,recv_p99_ms");
+        List<WsResult> results = new ArrayList<>();
+
+        for (Integer beds : levels) {
+            var scenarioOptions = new java.util.HashMap<>(options);
+            scenarioOptions.put("beds", String.valueOf(beds));
+            WsResult result = runBedside(scenarioOptions);
+            results.add(result);
+            printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+            rows.add(toWsCsvRow(result));
+        }
+
+        writeRows(outputCsv, rows);
+        writeWsMarkdown(outputMd, "Bedside Matrix", "beds", results);
+    }
+
+    private static void runNurseMatrix(Map<String, String> options) throws Exception {
+        List<Integer> levels = CliOptions.getIntList(options, "stationsLevels", "50,100,200,500,1000");
+        String outputCsv = CliOptions.get(options, "outputCsv", ".\\results\\nurse-matrix.csv");
+        String outputMd = CliOptions.get(options, "outputMd", ".\\results\\nurse-matrix.md");
+
+        List<String> rows = new ArrayList<>();
+        rows.add("stations,sent,recv,errors,recv_rate,recv_p95_ms,recv_p99_ms");
+        List<WsResult> results = new ArrayList<>();
+
+        for (Integer stations : levels) {
+            var scenarioOptions = new java.util.HashMap<>(options);
+            scenarioOptions.put("stations", String.valueOf(stations));
+            WsResult result = runNurse(scenarioOptions);
+            results.add(result);
+            printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+            rows.add(toNurseCsvRow(result));
+        }
+
+        writeRows(outputCsv, rows);
+        writeWsMarkdown(outputMd, "Nurse Matrix", "stations", results);
     }
 
     private static void runDbMixed(Map<String, String> options) throws Exception {
@@ -175,6 +227,7 @@ public final class LoadTestMain {
         String username = CliOptions.require(options, "username");
         String password = CliOptions.require(options, "password");
         String outputCsv = CliOptions.get(options, "outputCsv", "db-latency.csv");
+        String outputMd = CliOptions.get(options, "outputMd", "db-latency.md");
 
         int warmupSec = CliOptions.getInt(options, "warmupSec", 120);
         int measureSec = CliOptions.getInt(options, "measureSec", 180);
@@ -188,6 +241,7 @@ public final class LoadTestMain {
         List<String> rows = new ArrayList<>();
         rows.add("concurrency,write_ops,read_ops,write_p95_ms,write_p99_ms,read_p95_ms,read_p99_ms,write_err,read_err");
 
+        List<DbResult> results = new ArrayList<>();
         for (int concurrency : levels) {
             DbMetrics metrics = new DbMetrics();
             AtomicBoolean running = new AtomicBoolean(true);
@@ -235,16 +289,21 @@ public final class LoadTestMain {
                     metrics.writeErrors.sum(),
                     metrics.readErrors.sum());
             rows.add(line);
+            results.add(new DbResult(
+                    concurrency,
+                    metrics.writeOps.sum(),
+                    metrics.readOps.sum(),
+                    percentileMs(metrics.writeLatencyMicros, 95.0),
+                    percentileMs(metrics.writeLatencyMicros, 99.0),
+                    percentileMs(metrics.readLatencyMicros, 95.0),
+                    percentileMs(metrics.readLatencyMicros, 99.0),
+                    metrics.writeErrors.sum(),
+                    metrics.readErrors.sum()));
             System.out.println("[db] " + line);
         }
 
-        java.nio.file.Path csvPath = java.nio.file.Path.of(outputCsv);
-        java.nio.file.Path parent = csvPath.toAbsolutePath().getParent();
-        if (parent != null) {
-            java.nio.file.Files.createDirectories(parent);
-        }
-        java.nio.file.Files.write(csvPath, rows);
-        System.out.println("[db] csv written: " + csvPath.toAbsolutePath());
+        writeRows(outputCsv, rows);
+        writeDbMarkdown(outputMd, results);
     }
 
     private static void runDbWorker(String jdbcUrl,
@@ -328,22 +387,119 @@ public final class LoadTestMain {
         return buffer.array();
     }
 
-    private static void printWsResult(String label, int concurrency, int measureSec, Metrics metrics) {
+    private static void printWsResult(String label, int concurrency, int measureSec, WsSnapshot metrics) {
         double seconds = Math.max(1, measureSec);
-        double sendRate = metrics.sent.sum() / seconds;
-        double recvRate = metrics.received.sum() / seconds;
+        double sendRate = metrics.sent() / seconds;
+        double recvRate = metrics.received() / seconds;
 
         System.out.printf(Locale.ROOT,
                 "[%s] concurrency=%d sent=%d recv=%d errors=%d send_rate=%.2f/s recv_rate=%.2f/s send_p95=%.3fms recv_delay_p95=%.3fms%n",
                 label,
                 concurrency,
-                metrics.sent.sum(),
-                metrics.received.sum(),
-                metrics.errors.sum(),
+                metrics.sent(),
+                metrics.received(),
+                metrics.errors(),
                 sendRate,
                 recvRate,
-                percentileMs(metrics.sendLatencyMicros, 95.0),
-                percentileMs(metrics.eventDelayMicros, 95.0));
+                metrics.sendP95Ms(),
+                metrics.recvDelayP95Ms());
+    }
+
+    private static void writeRows(String outputCsv, List<String> rows) throws Exception {
+        java.nio.file.Path path = java.nio.file.Path.of(outputCsv);
+        java.nio.file.Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            java.nio.file.Files.createDirectories(parent);
+        }
+        java.nio.file.Files.write(path, rows);
+        System.out.println("[report] csv written: " + path.toAbsolutePath());
+    }
+
+    private static void writeWsMarkdown(String outputMd,
+                                        String title,
+                                        String concurrencyColumn,
+                                        List<WsResult> results) throws Exception {
+        List<String> lines = new ArrayList<>();
+        lines.add("# " + title);
+        lines.add("");
+        lines.add("| " + concurrencyColumn + " | sent | recv | errors | send p95(ms) | recv delay p95(ms) |");
+        lines.add("|---:|---:|---:|---:|---:|---:|");
+
+        for (WsResult result : results) {
+            WsSnapshot m = result.metrics();
+            lines.add(String.format(Locale.ROOT,
+                    "| %d | %d | %d | %d | %.3f | %.3f |",
+                    result.concurrency(), m.sent(), m.received(), m.errors(), m.sendP95Ms(), m.recvDelayP95Ms()));
+        }
+
+        java.nio.file.Path path = java.nio.file.Path.of(outputMd);
+        java.nio.file.Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            java.nio.file.Files.createDirectories(parent);
+        }
+        java.nio.file.Files.write(path, lines);
+        System.out.println("[report] markdown written: " + path.toAbsolutePath());
+    }
+
+    private static String toWsCsvRow(WsResult result) {
+        WsSnapshot m = result.metrics();
+        double seconds = Math.max(1, result.measureSec());
+        double sendRate = m.sent() / seconds;
+        double recvRate = m.received() / seconds;
+        return String.format(Locale.ROOT,
+                "%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+                result.concurrency(),
+                m.sent(),
+                m.received(),
+                m.errors(),
+                sendRate,
+                recvRate,
+                m.sendP95Ms(),
+                m.sendP99Ms(),
+                m.recvDelayP95Ms(),
+                m.recvDelayP99Ms());
+    }
+
+    private static String toNurseCsvRow(WsResult result) {
+        WsSnapshot m = result.metrics();
+        double seconds = Math.max(1, result.measureSec());
+        double recvRate = m.received() / seconds;
+        return String.format(Locale.ROOT,
+                "%d,%d,%d,%d,%.3f,%.3f,%.3f",
+                result.concurrency(),
+                m.sent(),
+                m.received(),
+                m.errors(),
+                recvRate,
+                m.recvDelayP95Ms(),
+                m.recvDelayP99Ms());
+    }
+
+    private static void writeDbMarkdown(String outputMd, List<DbResult> results) throws Exception {
+        List<String> lines = new ArrayList<>();
+        lines.add("# DB Mixed Workload");
+        lines.add("");
+        lines.add("| concurrency | write ops | read ops | write p95(ms) | read p95(ms) | write err | read err |");
+        lines.add("|---:|---:|---:|---:|---:|---:|---:|");
+        for (DbResult r : results) {
+            lines.add(String.format(Locale.ROOT,
+                    "| %d | %d | %d | %.3f | %.3f | %d | %d |",
+                    r.concurrency(),
+                    r.writeOps(),
+                    r.readOps(),
+                    r.writeP95Ms(),
+                    r.readP95Ms(),
+                    r.writeErr(),
+                    r.readErr()));
+        }
+
+        java.nio.file.Path path = java.nio.file.Path.of(outputMd);
+        java.nio.file.Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            java.nio.file.Files.createDirectories(parent);
+        }
+        java.nio.file.Files.write(path, lines);
+        System.out.println("[report] markdown written: " + path.toAbsolutePath());
     }
 
     private static double percentileMs(ConcurrentHistogram histogram, double p) {
@@ -362,9 +518,11 @@ public final class LoadTestMain {
     private static void printUsage() {
         System.out.println("Usage:");
         System.out.println("  bedside --baseUrl ws://localhost:8080 --beds 64 --fps 15 --warmupSec 120 --measureSec 180");
+        System.out.println("  bedside-matrix --baseUrl ws://localhost:8080 --bedsLevels 16,32,64,128,256 --fps 15 --outputCsv .\\results\\bedside-matrix.csv --outputMd .\\results\\bedside-matrix.md");
         System.out.println("  nurse --baseUrl ws://localhost:8080 --wardCode 内科一区 --stations 500 --warmupSec 120 --measureSec 180");
+        System.out.println("  nurse-matrix --baseUrl ws://localhost:8080 --wardCode 内科一区 --stationsLevels 50,100,200,500,1000 --outputCsv .\\results\\nurse-matrix.csv --outputMd .\\results\\nurse-matrix.md");
         System.out.println("  db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 \\");
-        System.out.println("     --concurrencyLevels 16,32,64,128 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --outputCsv .\\results\\db-latency.csv");
+        System.out.println("     --concurrencyLevels 16,32,64,128 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --outputCsv .\\results\\db-latency.csv --outputMd .\\results\\db-latency.md");
     }
 
     private static final class GenericWsListener implements WebSocket.Listener {
@@ -431,6 +589,41 @@ public final class LoadTestMain {
             sendLatencyMicros.reset();
             eventDelayMicros.reset();
         }
+
+        private WsSnapshot snapshot() {
+            return new WsSnapshot(
+                    sent.sum(),
+                    received.sum(),
+                    errors.sum(),
+                    percentileMs(sendLatencyMicros, 95.0),
+                    percentileMs(sendLatencyMicros, 99.0),
+                    percentileMs(eventDelayMicros, 95.0),
+                    percentileMs(eventDelayMicros, 99.0)
+            );
+        }
+    }
+
+    private record WsResult(String label, int concurrency, int measureSec, WsSnapshot metrics) {
+    }
+
+    private record WsSnapshot(long sent,
+                              long received,
+                              long errors,
+                              double sendP95Ms,
+                              double sendP99Ms,
+                              double recvDelayP95Ms,
+                              double recvDelayP99Ms) {
+    }
+
+    private record DbResult(int concurrency,
+                            long writeOps,
+                            long readOps,
+                            double writeP95Ms,
+                            double writeP99Ms,
+                            double readP95Ms,
+                            double readP99Ms,
+                            long writeErr,
+                            long readErr) {
     }
 
     private static final class DbMetrics {
