@@ -10,6 +10,15 @@ This module provides standalone performance tools for the `server` application.
 - `nurse-matrix`: Sweeps multiple nurse-station concurrency levels and writes CSV + Markdown report.
 - `db`: Runs mixed write + aggregate-query pressure on `patient_vitals` and exports CSV (`concurrency -> latency`).
 
+`bedside` and `nurse` now also write single-run result files by default:
+
+- `./results/bedside-result.csv`
+- `./results/bedside-result.md`
+- `./results/nurse-result.csv`
+- `./results/nurse-result.md`
+
+`db` cleanup is enabled by default (`--cleanup true`): synthetic rows from this run are deleted automatically after reports are written.
+
 ## Prerequisites
 
 - Java 25
@@ -66,6 +75,12 @@ $env:JAVA_TOOL_OPTIONS = "-Xms4g -Xmx4g -XX:+UseZGC -XX:+AlwaysPreTouch"
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --concurrencyLevels 16,32,64,128,256 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --outputCsv .\results\db-latency.csv --outputMd .\results\db-latency.md"
+```
+
+Disable cleanup only when you need to keep generated rows:
+
+```powershell
+..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --concurrencyLevels 16,32,64 --writeRatio 0.8 --warmupSec 60 --measureSec 120 --cleanup false"
 ```
 
 ## Plot Concurrency -> Latency

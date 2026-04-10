@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -50,10 +51,12 @@ public final class LoadTestMain {
             case "bedside" -> {
                 WsResult result = runBedside(options);
                 printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+                writeSingleWsResult("bedside", result, options);
             }
             case "nurse" -> {
                 WsResult result = runNurse(options);
                 printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+                writeSingleWsResult("nurse", result, options);
             }
             case "bedside-matrix" -> runBedsideMatrix(options);
             case "nurse-matrix" -> runNurseMatrix(options);
@@ -233,6 +236,8 @@ public final class LoadTestMain {
         String password = CliOptions.require(options, "password");
         String outputCsv = CliOptions.get(options, "outputCsv", "db-latency.csv");
         String outputMd = CliOptions.get(options, "outputMd", "db-latency.md");
+        boolean cleanup = CliOptions.getBoolean(options, "cleanup", true);
+        String runTag = CliOptions.get(options, "runTag", "db-" + System.currentTimeMillis());
 
         int warmupSec = CliOptions.getInt(options, "warmupSec", 120);
         int measureSec = CliOptions.getInt(options, "measureSec", 180);
@@ -242,11 +247,13 @@ public final class LoadTestMain {
         int patientStart = CliOptions.getInt(options, "patientStart", 1);
         int patientEnd = CliOptions.getInt(options, "patientEnd", 256);
         List<Integer> levels = CliOptions.getIntList(options, "concurrencyLevels", "16,32,64,128");
+        double markerLatency = -9000d - Math.abs(runTag.hashCode() % 500);
 
         List<String> rows = new ArrayList<>();
         rows.add("concurrency,write_ops,read_ops,write_p95_ms,write_p99_ms,read_p95_ms,read_p99_ms,write_err,read_err");
 
         List<DbResult> results = new ArrayList<>();
+        Instant runStart = Instant.now();
         for (int concurrency : levels) {
             DbMetrics metrics = new DbMetrics();
             AtomicBoolean running = new AtomicBoolean(true);
@@ -263,6 +270,7 @@ public final class LoadTestMain {
                         bedEnd,
                         patientStart,
                         patientEnd,
+                        markerLatency,
                         running,
                         measuring,
                         metrics
@@ -306,9 +314,28 @@ public final class LoadTestMain {
                     metrics.readErrors.sum()));
             System.out.println("[db] " + line);
         }
+        Instant runEnd = Instant.now();
 
         writeRows(outputCsv, rows);
         writeDbMarkdown(outputMd, results);
+
+        if (cleanup) {
+            int deleted = cleanupDbData(
+                    jdbcUrl,
+                    username,
+                    password,
+                    bedStart,
+                    bedEnd,
+                    patientStart,
+                    patientEnd,
+                    markerLatency,
+                    runStart,
+                    runEnd
+            );
+            System.out.printf(Locale.ROOT,
+                    "[db] cleanup enabled, runTag=%s, markerLatency=%.0f, deletedRows=%d%n",
+                    runTag, markerLatency, deleted);
+        }
     }
 
     private static void runDbWorker(String jdbcUrl,
@@ -319,6 +346,7 @@ public final class LoadTestMain {
                                     int bedEnd,
                                     int patientStart,
                                     int patientEnd,
+                                    double markerLatency,
                                     AtomicBoolean running,
                                     AtomicBoolean measuring,
                                     DbMetrics metrics) {
@@ -343,7 +371,7 @@ public final class LoadTestMain {
                         insert.setLong(2, randomBetween(patientStart, patientEnd));
                         insert.setDouble(3, ThreadLocalRandom.current().nextDouble(55.0, 120.0));
                         insert.setDouble(4, ThreadLocalRandom.current().nextDouble(0.3, 1.0));
-                        insert.setDouble(5, ThreadLocalRandom.current().nextDouble(5.0, 30.0));
+                        insert.setDouble(5, markerLatency);
                         insert.setDouble(6, ThreadLocalRandom.current().nextDouble(15.0, 90.0));
                         insert.setDouble(7, ThreadLocalRandom.current().nextDouble(8.0, 70.0));
                         insert.executeUpdate();
@@ -418,6 +446,56 @@ public final class LoadTestMain {
         }
         java.nio.file.Files.write(path, rows);
         System.out.println("[report] csv written: " + path.toAbsolutePath());
+    }
+
+    private static void writeSingleWsResult(String scenario,
+                                            WsResult result,
+                                            Map<String, String> options) throws Exception {
+        String outputCsv = CliOptions.get(options, "outputCsv", ".\\results\\" + scenario + "-result.csv");
+        String outputMd = CliOptions.get(options, "outputMd", ".\\results\\" + scenario + "-result.md");
+
+        List<String> rows = new ArrayList<>();
+        rows.add("concurrency,sent,recv,errors,send_rate,recv_rate,send_p95_ms,send_p99_ms,recv_p95_ms,recv_p99_ms");
+        rows.add(toWsCsvRow(result));
+        writeRows(outputCsv, rows);
+        writeWsMarkdown(outputMd, scenario + " Result", "concurrency", List.of(result));
+    }
+
+    private static int cleanupDbData(String jdbcUrl,
+                                     String username,
+                                     String password,
+                                     int bedStart,
+                                     int bedEnd,
+                                     int patientStart,
+                                     int patientEnd,
+                                     double markerLatency,
+                                     Instant runStart,
+                                     Instant runEnd) {
+        String deleteSql = "DELETE FROM patient_vitals "
+                + "WHERE bed_id BETWEEN ? AND ? "
+                + "AND patient_id BETWEEN ? AND ? "
+                + "AND latency = ? "
+                + "AND \"time\" >= ? AND \"time\" <= ?";
+
+        int minBed = Math.min(bedStart, bedEnd);
+        int maxBed = Math.max(bedStart, bedEnd);
+        int minPatient = Math.min(patientStart, patientEnd);
+        int maxPatient = Math.max(patientStart, patientEnd);
+
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
+             PreparedStatement delete = conn.prepareStatement(deleteSql)) {
+            delete.setInt(1, minBed);
+            delete.setInt(2, maxBed);
+            delete.setInt(3, minPatient);
+            delete.setInt(4, maxPatient);
+            delete.setDouble(5, markerLatency);
+            delete.setTimestamp(6, Timestamp.from(runStart.minusSeconds(5)));
+            delete.setTimestamp(7, Timestamp.from(runEnd.plusSeconds(5)));
+            return delete.executeUpdate();
+        } catch (Exception e) {
+            System.out.println("[db] cleanup failed: " + e.getMessage());
+            return -1;
+        }
     }
 
     private static void writeWsMarkdown(String outputMd,
@@ -523,11 +601,13 @@ public final class LoadTestMain {
     private static void printUsage() {
         System.out.println("Usage:");
         System.out.println("  bedside --baseUrl ws://localhost:8080 --beds 64 --fps 15 --warmupSec 120 --measureSec 180");
+        System.out.println("     (writes .\\results\\bedside-result.csv and .\\results\\bedside-result.md by default)");
         System.out.println("  bedside-matrix --baseUrl ws://localhost:8080 --bedsLevels 16,32,64,128,256 --fps 15 --outputCsv .\\results\\bedside-matrix.csv --outputMd .\\results\\bedside-matrix.md");
         System.out.println("  nurse --baseUrl ws://localhost:8080 --wardCode 内科一区 --stations 500 --warmupSec 120 --measureSec 180");
+        System.out.println("     (writes .\\results\\nurse-result.csv and .\\results\\nurse-result.md by default)");
         System.out.println("  nurse-matrix --baseUrl ws://localhost:8080 --wardCode 内科一区 --stationsLevels 50,100,200,500,1000 --outputCsv .\\results\\nurse-matrix.csv --outputMd .\\results\\nurse-matrix.md");
         System.out.println("  db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 \\");
-        System.out.println("     --concurrencyLevels 16,32,64,128 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --outputCsv .\\results\\db-latency.csv --outputMd .\\results\\db-latency.md");
+        System.out.println("     --concurrencyLevels 16,32,64,128 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --cleanup true --outputCsv .\\results\\db-latency.csv --outputMd .\\results\\db-latency.md");
     }
 
     private static final class GenericWsListener implements WebSocket.Listener {
@@ -696,6 +776,14 @@ public final class LoadTestMain {
                 return defaultValue;
             }
             return Double.parseDouble(value);
+        }
+
+        static boolean getBoolean(Map<String, String> options, String key, boolean defaultValue) {
+            String value = options.get(key);
+            if (value == null || value.isBlank()) {
+                return defaultValue;
+            }
+            return Boolean.parseBoolean(value);
         }
 
         static List<Integer> getIntList(Map<String, String> options, String key, String defaultValue) {
