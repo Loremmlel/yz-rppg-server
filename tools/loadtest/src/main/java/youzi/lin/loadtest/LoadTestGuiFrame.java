@@ -39,10 +39,17 @@ final class LoadTestGuiFrame extends JFrame {
     });
     private final JComboBox<String> profileBox = new JComboBox<>(new String[]{"quick", "balanced", "high"});
     private final JCheckBox cleanupBox = new JCheckBox("cleanup", true);
+    private final JCheckBox serverAutoStartBox = new JCheckBox("autoStartServer", true);
+    private final JCheckBox serverInstrumentationBox = new JCheckBox("loadtest埋点开关", true);
 
     private final JTextField baseUrlField = new JTextField("ws://localhost:8080");
     private final JTextField wardCodeField = new JTextField("内科一区");
     private final JTextField outDirField = new JTextField(".\\results");
+    private final JTextField serverWorkDirField = new JTextField("..\\..");
+    private final JTextField serverProfileField = new JTextField("loadtest");
+    private final JComboBox<String> serverJvmPresetBox = new JComboBox<>(new String[]{"g1-4g", "g1-8g", "zgc-4g", "zgc-8g", "none"});
+    private final JTextField serverJvmArgsField = new JTextField();
+    private final JTextField serverReadyTimeoutField = new JTextField("120");
 
     private final JTextField warmupField = new JTextField("30");
     private final JTextField measureField = new JTextField("60");
@@ -148,6 +155,11 @@ final class LoadTestGuiFrame extends JFrame {
         putIfNotBlank(values, "baseUrl", baseUrlField.getText());
         putIfNotBlank(values, "wardCode", wardCodeField.getText());
         putIfNotBlank(values, "outDir", outDirField.getText());
+        putIfNotBlank(values, "serverWorkDir", serverWorkDirField.getText());
+        putIfNotBlank(values, "serverProfile", serverProfileField.getText());
+        putIfNotBlank(values, "serverJvmPreset", String.valueOf(serverJvmPresetBox.getSelectedItem()));
+        putIfNotBlank(values, "serverJvmArgs", serverJvmArgsField.getText());
+        putIfNotBlank(values, "serverReadyTimeoutSec", serverReadyTimeoutField.getText());
 
         putIfNotBlank(values, "warmupSec", warmupField.getText());
         putIfNotBlank(values, "measureSec", measureField.getText());
@@ -166,6 +178,8 @@ final class LoadTestGuiFrame extends JFrame {
 
         putIfNotBlank(values, "profile", String.valueOf(profileBox.getSelectedItem()));
         values.put("cleanup", String.valueOf(cleanupBox.isSelected()));
+        values.put("serverAutoStart", String.valueOf(serverAutoStartBox.isSelected()));
+        values.put("serverEnableLoadtestInstrumentation", String.valueOf(serverInstrumentationBox.isSelected()));
         return values;
     }
 
@@ -250,6 +264,13 @@ final class LoadTestGuiFrame extends JFrame {
         addBinding("服务地址(baseUrl)", "baseUrl", baseUrlField, setOf("bedside", "nurse", "bedside-matrix", "nurse-matrix", "smart-suite"));
         addBinding("病区编码(wardCode)", "wardCode", wardCodeField, setOf("nurse", "nurse-matrix", "smart-suite"));
         addBinding("输出目录(outDir)", "outDir", outDirField, setOf("smart-suite"));
+        addBinding("自动启动主应用(serverAutoStart)", "serverAutoStart", serverAutoStartBox, allScenariosExceptGui());
+        addBinding("主应用目录(serverWorkDir)", "serverWorkDir", serverWorkDirField, allScenariosExceptGui());
+        addBinding("主应用profile(serverProfile)", "serverProfile", serverProfileField, allScenariosExceptGui());
+        addBinding("JVM预设(serverJvmPreset)", "serverJvmPreset", serverJvmPresetBox, allScenariosExceptGui());
+        addBinding("自定义JVM参数(serverJvmArgs)", "serverJvmArgs", serverJvmArgsField, allScenariosExceptGui());
+        addBinding("主应用就绪超时秒(serverReadyTimeoutSec)", "serverReadyTimeoutSec", serverReadyTimeoutField, allScenariosExceptGui());
+        addBinding("启用loadtest埋点(serverEnableLoadtestInstrumentation)", "serverEnableLoadtestInstrumentation", serverInstrumentationBox, allScenariosExceptGui());
 
         addBinding("预热秒数(warmupSec)", "warmupSec", warmupField, allScenariosExceptGui());
         addBinding("测量秒数(measureSec)", "measureSec", measureField, allScenariosExceptGui());

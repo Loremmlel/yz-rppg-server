@@ -46,6 +46,10 @@ public final class LoadTestMain {
         System.out.println("  smart-suite --baseUrl ws://localhost:8080 --wardCode 内科一区 --profile balanced --outDir .\\results --warmupSec 30 --measureSec 60");
         System.out.println("     (runs bedside+nurse+db ladder automatically and writes csv/md/svg for each)");
         System.out.println("  runtime endpoint default: http://<baseUrl-host>/api/loadtest/runtime-snapshot (loadtest profile)");
+        System.out.println("  optional server auto-start:");
+        System.out.println("     --serverAutoStart true --serverWorkDir ..\\.. --serverProfile loadtest");
+        System.out.println("     --serverJvmPreset g1-4g|g1-8g|zgc-4g|zgc-8g|none --serverJvmArgs \"-XX:+HeapDumpOnOutOfMemoryError\"");
+        System.out.println("     --serverEnableLoadtestInstrumentation true --serverReadyTimeoutSec 120");
         System.out.println("  gui");
         System.out.println("     (launches a Swing GUI for all scenarios and options)");
     }

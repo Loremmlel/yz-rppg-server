@@ -20,6 +20,13 @@ final class CliOptions {
             String value = "true";
             if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
                 value = args[++i];
+                if ("serverJvmArgs".equals(key)) {
+                    StringBuilder builder = new StringBuilder(value);
+                    while (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                        builder.append(' ').append(args[++i]);
+                    }
+                    value = builder.toString();
+                }
             }
             map.put(key, value);
         }

@@ -22,24 +22,27 @@ final class LoadTestScenarioExecutor {
     }
 
     void execute(String scenario, Map<String, String> options, RunEvents events) throws Exception {
-        switch (scenario) {
-            case "bedside" -> {
-                WsResult result = service.runBedside(options);
-                LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
-                LoadTestService.printRuntimeSummary(result.label(), result.runtimeSummary());
-                ReportWriter.writeSingleWsResult("bedside", result, options);
+        try (ServerAppLauncher launcher = new ServerAppLauncher(options, events::onLog)) {
+            launcher.startIfEnabled();
+            switch (scenario) {
+                case "bedside" -> {
+                    WsResult result = service.runBedside(options);
+                    LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+                    LoadTestService.printRuntimeSummary(result.label(), result.runtimeSummary());
+                    ReportWriter.writeSingleWsResult("bedside", result, options);
+                }
+                case "nurse" -> {
+                    WsResult result = service.runNurse(options);
+                    LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+                    LoadTestService.printRuntimeSummary(result.label(), result.runtimeSummary());
+                    ReportWriter.writeSingleWsResult("nurse", result, options);
+                }
+                case "bedside-matrix" -> service.runBedsideMatrix(options);
+                case "nurse-matrix" -> service.runNurseMatrix(options);
+                case "db" -> service.runDbMixed(options);
+                case "smart-suite" -> service.runSmartSuite(options);
+                default -> throw new IllegalArgumentException("Unknown scenario: " + scenario);
             }
-            case "nurse" -> {
-                WsResult result = service.runNurse(options);
-                LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
-                LoadTestService.printRuntimeSummary(result.label(), result.runtimeSummary());
-                ReportWriter.writeSingleWsResult("nurse", result, options);
-            }
-            case "bedside-matrix" -> service.runBedsideMatrix(options);
-            case "nurse-matrix" -> service.runNurseMatrix(options);
-            case "db" -> service.runDbMixed(options);
-            case "smart-suite" -> service.runSmartSuite(options);
-            default -> throw new IllegalArgumentException("Unknown scenario: " + scenario);
         }
 
         for (Path path : expectedReports(scenario, options)) {

@@ -42,7 +42,7 @@
 
 - Java 25
 - Maven 3.9+
-- Spring Boot 服务已启动（建议使用 `loadtest` profile）
+- Spring Boot 服务已启动（建议使用 `loadtest` profile），或启用压测工具自动拉起
 - PostgreSQL/TimescaleDB 可连接（仅 `db` 场景必需）
 
 ## 快速开始（PowerShell）
@@ -66,12 +66,36 @@ $env:JAVA_TOOL_OPTIONS = "-Xms4g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -X
 $env:JAVA_TOOL_OPTIONS = "-Xms4g -Xmx4g -XX:+UseZGC -XX:+AlwaysPreTouch"
 ```
 
+## 自动启动主应用（新）
+
+压测工具现在支持在场景开始前自动拉起主应用，并在结束后自动回收进程。
+
+- `--serverAutoStart true`：开启自动启动。
+- `--serverWorkDir ..\..`：主应用目录（默认就是 `server` 根目录）。
+- `--serverProfile loadtest`：启动时激活 profile。
+- `--serverEnableLoadtestInstrumentation true`：自动追加 `app.loadtest.grpc-mock.enabled=true` 和 `app.loadtest.nurse-pump.enabled=true`。
+- `--serverJvmPreset`：可选 `g1-4g`、`g1-8g`、`zgc-4g`、`zgc-8g`、`none`。
+- `--serverJvmArgs`：自定义 JVM 参数，和预设参数拼接。
+- `--serverReadyTimeoutSec`：等待主应用就绪超时（默认 120 秒）。
+- `--serverReadyEndpoint`：可自定义就绪探针地址（默认 `http://<host>/api/loadtest/runtime-snapshot`）。
+
+主应用日志会实时打印到压测日志中，带前缀：
+
+- `[server-OUT] ...`
+- `[server-ERR] ...`
+
 ## 命令行示例
 
 ### 1) 病床端
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="bedside --baseUrl ws://localhost:8080 --beds 128 --fps 15 --warmupSec 120 --measureSec 180"
+```
+
+病床端（自动启动主应用 + G1 4G 预设 + 自定义参数）：
+
+```powershell
+..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="bedside --baseUrl ws://localhost:8080 --beds 128 --fps 15 --warmupSec 30 --measureSec 60 --serverAutoStart true --serverProfile loadtest --serverJvmPreset g1-4g --serverJvmArgs -XX:+HeapDumpOnOutOfMemoryError"
 ```
 
 ### 2) 护士站
