@@ -1,6 +1,7 @@
 package youzi.lin.loadtest;
 
 import javax.swing.SwingWorker;
+import java.util.concurrent.CancellationException;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -28,7 +29,12 @@ final class LoadTestSwingRunner extends SwingWorker<Void, String> {
     @Override
     protected Void doInBackground() {
         try {
-            publish("Starting scenario: " + scenario);
+            if (isCancelled()) {
+                publish("任务已在启动前取消。");
+                return null;
+            }
+
+            publish("开始执行场景: " + scenario);
             LoadTestScenarioExecutor executor = new LoadTestScenarioExecutor();
             executor.execute(scenario, options, new LoadTestScenarioExecutor.RunEvents() {
                 @Override
@@ -38,12 +44,26 @@ final class LoadTestSwingRunner extends SwingWorker<Void, String> {
 
                 @Override
                 public void onReportPath(java.nio.file.Path path) {
-                    reportConsumer.accept(path.toString());
-                    publish("Report: " + path);
+                    publish("__REPORT__" + path);
+                    publish("报告文件: " + path);
                 }
             });
+            if (isCancelled()) {
+                publish("已收到停止请求，任务结束。");
+            } else {
+                publish("场景执行完成: " + scenario);
+            }
+        } catch (CancellationException e) {
+            publish("任务已取消。");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            publish("任务线程被中断，正在结束。");
         } catch (Exception e) {
-            publish("Failed: " + e.getMessage());
+            if (isCancelled()) {
+                publish("已请求停止，任务正在收尾。");
+            } else {
+                publish("执行失败: " + e.getMessage());
+            }
         }
         return null;
     }
@@ -51,7 +71,11 @@ final class LoadTestSwingRunner extends SwingWorker<Void, String> {
     @Override
     protected void process(List<String> chunks) {
         for (String line : chunks) {
-            logConsumer.accept(line);
+            if (line.startsWith("__REPORT__")) {
+                reportConsumer.accept(line.substring("__REPORT__".length()));
+            } else {
+                logConsumer.accept(line);
+            }
         }
     }
 

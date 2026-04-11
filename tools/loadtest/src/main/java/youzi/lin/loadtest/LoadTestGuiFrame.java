@@ -17,14 +17,20 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class LoadTestGuiFrame extends JFrame {
 
@@ -56,39 +62,25 @@ final class LoadTestGuiFrame extends JFrame {
     private final JTextArea logArea = new JTextArea();
     private final DefaultListModel<String> reportModel = new DefaultListModel<>();
     private final JList<String> reportList = new JList<>(reportModel);
+    private final JPanel fieldsPanel = new JPanel(new GridLayout(0, 4, 8, 6));
+    private final List<FieldBinding> fieldBindings = new ArrayList<>();
 
-    private final JButton runButton = new JButton("Run");
-    private final JButton stopButton = new JButton("Stop");
-    private final JButton openReportButton = new JButton("Open Selected Report");
-    private final JButton browseOutDirButton = new JButton("Browse OutDir");
+    private final JButton runButton = new JButton("开始压测");
+    private final JButton stopButton = new JButton("停止");
+    private final JButton openReportButton = new JButton("打开选中报告");
+    private final JButton browseOutDirButton = new JButton("选择输出目录");
 
     private LoadTestSwingRunner currentRunner;
+    private boolean stopRequested;
 
     LoadTestGuiFrame() {
-        super("Load Test GUI");
+        super("压测工具图形界面");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(new Dimension(1200, 760));
         setLocationRelativeTo(null);
 
-        JPanel fieldsPanel = new JPanel(new GridLayout(0, 4, 8, 6));
-        addField(fieldsPanel, "scenario", scenarioBox);
-        addField(fieldsPanel, "profile", profileBox);
-        addField(fieldsPanel, "cleanup", cleanupBox);
-        addField(fieldsPanel, "baseUrl", baseUrlField);
-        addField(fieldsPanel, "wardCode", wardCodeField);
-        addField(fieldsPanel, "outDir", outDirField);
-        addField(fieldsPanel, "warmupSec", warmupField);
-        addField(fieldsPanel, "measureSec", measureField);
-        addField(fieldsPanel, "fps", fpsField);
-        addField(fieldsPanel, "beds", bedsField);
-        addField(fieldsPanel, "stations", stationsField);
-        addField(fieldsPanel, "writeRatio", writeRatioField);
-        addField(fieldsPanel, "bedsLevels", bedsLevelsField);
-        addField(fieldsPanel, "stationsLevels", stationsLevelsField);
-        addField(fieldsPanel, "concurrencyLevels", concurrencyLevelsField);
-        addField(fieldsPanel, "jdbcUrl", jdbcUrlField);
-        addField(fieldsPanel, "username", usernameField);
-        addField(fieldsPanel, "password", passwordField);
+        registerFields();
+        refreshVisibleFields();
 
         JPanel topActions = new JPanel(new GridLayout(1, 4, 8, 6));
         topActions.add(runButton);
@@ -125,14 +117,16 @@ final class LoadTestGuiFrame extends JFrame {
         stopButton.addActionListener(e -> stopRun());
         browseOutDirButton.addActionListener(e -> pickOutDir());
         openReportButton.addActionListener(e -> openSelectedReport());
+        scenarioBox.addActionListener(e -> refreshVisibleFields());
     }
 
     private void startRun() {
         if (currentRunner != null && !currentRunner.isDone()) {
-            appendLog("A run is already active.");
+            appendLog("已有压测任务在运行，请先停止或等待完成。");
             return;
         }
 
+        stopRequested = false;
         reportModel.clear();
         String scenario = String.valueOf(scenarioBox.getSelectedItem());
         Map<String, String> options = buildOptions();
@@ -178,19 +172,29 @@ final class LoadTestGuiFrame extends JFrame {
     private void setRunningState() {
         runButton.setEnabled(false);
         stopButton.setEnabled(true);
+        stopButton.setText("停止");
     }
 
     private void setIdleState() {
         runButton.setEnabled(true);
         stopButton.setEnabled(false);
+        stopButton.setText("停止");
+        if (stopRequested) {
+            appendLog("停止流程结束，界面已恢复空闲状态。");
+            stopRequested = false;
+        }
     }
 
     private void stopRun() {
         if (currentRunner != null && !currentRunner.isDone()) {
+            stopRequested = true;
             currentRunner.cancel(true);
-            appendLog("Cancel requested.");
+            stopButton.setEnabled(false);
+            stopButton.setText("停止中...");
+            appendLog("已发送停止请求，等待任务收尾...");
+            return;
         }
-        setIdleState();
+        appendLog("当前没有运行中的任务。");
     }
 
     private void pickOutDir() {
@@ -205,19 +209,19 @@ final class LoadTestGuiFrame extends JFrame {
     private void openSelectedReport() {
         String pathText = reportList.getSelectedValue();
         if (pathText == null || pathText.isBlank()) {
-            JOptionPane.showMessageDialog(this, "Select a report first.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "请先选择一个报告文件。", "提示", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
 
         try {
             Path path = Path.of(pathText);
             if (!Files.exists(path)) {
-                JOptionPane.showMessageDialog(this, "File not found: " + path, "Warning", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "文件不存在: " + path, "警告", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             Desktop.getDesktop().open(path.toFile());
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Open failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "打开失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -238,9 +242,76 @@ final class LoadTestGuiFrame extends JFrame {
         }
     }
 
-    private static void addField(JPanel panel, String label, java.awt.Component component) {
-        panel.add(new JLabel(label));
-        panel.add(component);
+    private void registerFields() {
+        addBinding("场景", "scenario", scenarioBox, allScenarios());
+        addBinding("压力档位", "profile", profileBox, setOf("bedside-matrix", "nurse-matrix", "db", "smart-suite"));
+        addBinding("自动清理DB假数据", "cleanup", cleanupBox, setOf("db", "smart-suite"));
+
+        addBinding("服务地址(baseUrl)", "baseUrl", baseUrlField, setOf("bedside", "nurse", "bedside-matrix", "nurse-matrix", "smart-suite"));
+        addBinding("病区编码(wardCode)", "wardCode", wardCodeField, setOf("nurse", "nurse-matrix", "smart-suite"));
+        addBinding("输出目录(outDir)", "outDir", outDirField, setOf("smart-suite"));
+
+        addBinding("预热秒数(warmupSec)", "warmupSec", warmupField, allScenariosExceptGui());
+        addBinding("测量秒数(measureSec)", "measureSec", measureField, allScenariosExceptGui());
+        addBinding("帧率(fps)", "fps", fpsField, setOf("bedside", "bedside-matrix", "smart-suite"));
+        addBinding("床位并发(beds)", "beds", bedsField, setOf("bedside"));
+        addBinding("护士站并发(stations)", "stations", stationsField, setOf("nurse"));
+        addBinding("写入占比(writeRatio)", "writeRatio", writeRatioField, setOf("db", "smart-suite"));
+
+        addBinding("床位阶梯(bedsLevels)", "bedsLevels", bedsLevelsField, setOf("bedside-matrix", "smart-suite"));
+        addBinding("护士站阶梯(stationsLevels)", "stationsLevels", stationsLevelsField, setOf("nurse-matrix", "smart-suite"));
+        addBinding("DB并发阶梯(concurrencyLevels)", "concurrencyLevels", concurrencyLevelsField, setOf("db", "smart-suite"));
+
+        addBinding("JDBC地址(jdbcUrl)", "jdbcUrl", jdbcUrlField, setOf("db", "smart-suite"));
+        addBinding("数据库用户名(username)", "username", usernameField, setOf("db", "smart-suite"));
+        addBinding("数据库密码(password)", "password", passwordField, setOf("db", "smart-suite"));
+    }
+
+    private void refreshVisibleFields() {
+        String scenario = String.valueOf(scenarioBox.getSelectedItem());
+        fieldsPanel.removeAll();
+        for (FieldBinding binding : fieldBindings) {
+            boolean visible = binding.scenarios.contains(scenario);
+            binding.label.setVisible(visible);
+            binding.component.setVisible(visible);
+            if (visible) {
+                fieldsPanel.add(binding.label);
+                fieldsPanel.add(binding.component);
+            }
+        }
+        fieldsPanel.revalidate();
+        fieldsPanel.repaint();
+    }
+
+    private void addBinding(String text, String key, Component component, Set<String> scenarios) {
+        fieldBindings.add(new FieldBinding(new JLabel(text), component, key, scenarios));
+    }
+
+    private static Set<String> allScenarios() {
+        return setOf("bedside", "nurse", "bedside-matrix", "nurse-matrix", "db", "smart-suite");
+    }
+
+    private static Set<String> allScenariosExceptGui() {
+        return allScenarios();
+    }
+
+    private static Set<String> setOf(String... values) {
+        return new HashSet<>(Arrays.asList(values));
+    }
+
+    private static final class FieldBinding {
+        private final JLabel label;
+        private final Component component;
+        @SuppressWarnings("unused")
+        private final String key;
+        private final Set<String> scenarios;
+
+        private FieldBinding(JLabel label, Component component, String key, Set<String> scenarios) {
+            this.label = label;
+            this.component = component;
+            this.key = key;
+            this.scenarios = scenarios;
+        }
     }
 }
 

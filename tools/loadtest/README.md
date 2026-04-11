@@ -1,146 +1,148 @@
-# Load Test Toolkit
+# 压测工具（Load Test Toolkit）
 
-This module provides standalone performance tools for the `server` application.
+本模块为 `server` 提供独立的性能压测工具，支持命令行和 Swing 图形界面两种方式。
 
-## Scenarios
+## 场景说明
 
-- `bedside`: Opens many `/ws?bedId=...` clients and sends 256x256 white image frames.
-- `nurse`: Opens many `/ws/nurse` clients, subscribes to a ward, and measures push throughput.
-- `bedside-matrix`: Sweeps multiple bedside concurrency levels and writes CSV + Markdown report.
-- `nurse-matrix`: Sweeps multiple nurse-station concurrency levels and writes CSV + Markdown report.
-- `db`: Runs mixed write + aggregate-query pressure on `patient_vitals` and exports CSV (`concurrency -> latency`).
-- `smart-suite`: One command to run low -> medium-low -> medium -> high ladder for bedside + nurse + db and output CSV/Markdown/SVG charts.
-- `gui`: Launches a Swing desktop app to configure and run all scenarios.
+- `bedside`：创建多个 `/ws?bedId=...` 病床端连接，发送 256x256 全白图像帧。
+- `nurse`：创建多个 `/ws/nurse` 护士站连接，订阅病区并统计推送性能。
+- `bedside-matrix`：按床位并发阶梯压测，输出 CSV + Markdown。
+- `nurse-matrix`：按护士站并发阶梯压测，输出 CSV + Markdown。
+- `db`：仅压 `patient_vitals` 表的混合写入 + 聚合查询，输出并发-延迟数据。
+- `smart-suite`：一次命令自动执行低/中低/中/高阶梯（病床端 + 护士站 + DB），输出 CSV/Markdown/SVG。
+- `gui`：启动 Swing 图形界面，所有参数可视化配置。
 
-`bedside` and `nurse` now also write single-run result files by default:
+默认情况下，`bedside` 与 `nurse` 也会生成单次结果文件：
 
 - `./results/bedside-result.csv`
 - `./results/bedside-result.md`
 - `./results/nurse-result.csv`
 - `./results/nurse-result.md`
 
-`db` cleanup is enabled by default (`--cleanup true`): synthetic rows from this run are deleted automatically after reports are written.
+`db` 默认开启清理（`--cleanup true`）：本次压测写入的假数据会在报告完成后自动删除。
 
-## Prerequisites
+## 前置条件
 
 - Java 25
 - Maven 3.9+
-- Running Spring Boot app (`loadtest` profile is recommended)
-- PostgreSQL/TimescaleDB reachable (for `db` scenario)
+- Spring Boot 服务已启动（建议使用 `loadtest` profile）
+- PostgreSQL/TimescaleDB 可连接（仅 `db` 场景必需）
 
-## Quick Start (PowerShell)
+## 快速开始（PowerShell）
 
 ```powershell
 Set-Location "E:\Code\graduation project\server\tools\loadtest"
 ..\..\mvnw.cmd -f pom.xml compile
 ```
 
-## JVM Baseline (Recommended)
+## JVM 基线建议
 
-Use fixed heap and explicit GC for comparable runs.
+建议固定堆大小和 GC 参数，确保不同压测轮次可比。
 
 ```powershell
 $env:JAVA_TOOL_OPTIONS = "-Xms4g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+AlwaysPreTouch"
 ```
 
-Optional low-latency experiment group:
+可选的低延迟实验参数：
 
 ```powershell
 $env:JAVA_TOOL_OPTIONS = "-Xms4g -Xmx4g -XX:+UseZGC -XX:+AlwaysPreTouch"
 ```
 
-### 1) Bedside
+## 命令行示例
+
+### 1) 病床端
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="bedside --baseUrl ws://localhost:8080 --beds 128 --fps 15 --warmupSec 120 --measureSec 180"
 ```
 
-### 2) Nurse Station
+### 2) 护士站
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="nurse --baseUrl ws://localhost:8080 --wardCode 内科一区 --stations 1000 --warmupSec 120 --measureSec 180"
 ```
 
-### 2.1) Bedside Matrix
+### 2.1) 病床端阶梯
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="bedside-matrix --baseUrl ws://localhost:8080 --bedsLevels 16,32,64,128,256 --fps 15 --warmupSec 120 --measureSec 180 --outputCsv .\results\bedside-matrix.csv --outputMd .\results\bedside-matrix.md"
 ```
 
-### 2.2) Nurse Matrix
+### 2.2) 护士站阶梯
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="nurse-matrix --baseUrl ws://localhost:8080 --wardCode 内科一区 --stationsLevels 50,100,200,500,1000 --warmupSec 120 --measureSec 180 --outputCsv .\results\nurse-matrix.csv --outputMd .\results\nurse-matrix.md"
 ```
 
-### 3) DB Mixed Workload
+### 3) DB 混合负载
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --concurrencyLevels 16,32,64,128,256 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --outputCsv .\results\db-latency.csv --outputMd .\results\db-latency.md"
 ```
 
-Disable cleanup only when you need to keep generated rows:
+仅在需要保留假数据时关闭清理：
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --concurrencyLevels 16,32,64 --writeRatio 0.8 --warmupSec 60 --measureSec 120 --cleanup false"
 ```
 
-## Plot Concurrency -> Latency
+## 自动绘图
 
 ```powershell
 python .\plot_latency.py --csv .\results\db-latency.csv --out .\results\db-latency.png
 ```
 
-`*-matrix` and `smart-suite` now also generate SVG charts automatically next to CSV files:
+`*-matrix` 与 `smart-suite` 还会自动生成 SVG：
 
 - `*-throughput.svg`
 - `*-latency.svg`
 
-## One-Command Smart Ladder
+## 一键智能阶梯压测
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="smart-suite --baseUrl ws://localhost:8080 --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --wardCode 内科一区 --profile balanced --outDir .\results --warmupSec 30 --measureSec 60 --cleanup true"
 ```
 
-Available `--profile` values:
+`--profile` 可选值：
 
-- `quick`: short ladder (fewer levels, fast sanity check)
-- `balanced`: default ladder
-- `high`: higher upper bound for stress runs
+- `quick`：快速验证（阶梯少、耗时短）
+- `balanced`：默认方案
+- `high`：更高上限压力
 
-## GUI Runner (Swing)
+## GUI 启动（Swing）
 
-Launch GUI from the default CLI entry:
+通过默认入口启动：
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java "-Dexec.args=gui"
 ```
 
-Or run GUI main class directly:
+或直接指定 GUI 主类：
 
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java "-Dexec.mainClass=youzi.lin.loadtest.LoadTestGuiMain"
 ```
 
-GUI features:
+GUI 已支持：
 
-- scenario selection (`bedside`, `nurse`, `bedside-matrix`, `nurse-matrix`, `db`, `smart-suite`)
-- all common options editable in one form (URL, DB, levels, warmup/measure, profile, cleanup)
-- background execution with live log panel
-- expected report path list and one-click open
+- 场景切换（`bedside`、`nurse`、`bedside-matrix`、`nurse-matrix`、`db`、`smart-suite`）
+- 按场景动态展示参数
+- 后台运行 + 实时日志
+- 报告路径列表 + 一键打开
 
-## Spring Boot Side Flags
+## Spring Boot 侧建议开关
 
-Use profile `loadtest` in `server` app:
+建议 `server` 使用 `loadtest` profile：
 
-- `app.loadtest.grpc-mock.enabled=true` (replace Python gRPC with synthetic vitals)
-- `app.loadtest.nurse-pump.enabled=true` (continuously publish fake ward updates)
+- `app.loadtest.grpc-mock.enabled=true`（用模拟生命体征替代 Python gRPC）
+- `app.loadtest.nurse-pump.enabled=true`（持续产生护士站推送假数据）
 
-You can tune these in `src/main/resources/application-loadtest.yaml`.
+可在 `src/main/resources/application-loadtest.yaml` 调整。
 
-## Warmup Discipline
+## 预热建议
 
-- Keep `warmupSec` non-zero (typical 120-600 seconds).
-- Keep JVM flags identical for all points in one matrix run.
-- Re-run bottleneck points at least 3 times and compare median p95/p99.
+- `warmupSec` 不建议为 0（建议 120-600 秒）。
+- 同一轮矩阵压测保持 JVM 参数一致。
+- 对瓶颈点重复至少 3 次，比较 p95/p99 中位值。
 
