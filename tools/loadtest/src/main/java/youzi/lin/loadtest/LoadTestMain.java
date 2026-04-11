@@ -15,28 +15,19 @@ public final class LoadTestMain {
         }
 
         String scenario = args[0].toLowerCase(Locale.ROOT);
-        Map<String, String> options = CliOptions.parse(args);
-        LoadTestService service = new LoadTestService();
+        if ("gui".equals(scenario)) {
+            LoadTestGuiMain.launch();
+            return;
+        }
 
-        switch (scenario) {
-            case "bedside" -> {
-                WsResult result = service.runBedside(options);
-                LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
-                ReportWriter.writeSingleWsResult("bedside", result, options);
-            }
-            case "nurse" -> {
-                WsResult result = service.runNurse(options);
-                LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
-                ReportWriter.writeSingleWsResult("nurse", result, options);
-            }
-            case "bedside-matrix" -> service.runBedsideMatrix(options);
-            case "nurse-matrix" -> service.runNurseMatrix(options);
-            case "db" -> service.runDbMixed(options);
-            case "smart-suite" -> service.runSmartSuite(options);
-            default -> {
-                System.out.println("Unknown scenario: " + scenario);
-                printUsage();
-            }
+        Map<String, String> options = CliOptions.parse(args);
+
+        try {
+            new LoadTestScenarioExecutor().execute(scenario, options, new LoadTestScenarioExecutor.RunEvents() {
+            });
+        } catch (IllegalArgumentException ex) {
+            System.out.println(ex.getMessage());
+            printUsage();
         }
     }
 
@@ -52,6 +43,8 @@ public final class LoadTestMain {
         System.out.println("     --concurrencyLevels 16,32,64,128 --profile balanced --writeRatio 0.8 --warmupSec 120 --measureSec 180 --cleanup true --outputCsv .\\results\\db-latency.csv --outputMd .\\results\\db-latency.md");
         System.out.println("  smart-suite --baseUrl ws://localhost:8080 --wardCode 内科一区 --profile balanced --outDir .\\results --warmupSec 30 --measureSec 60");
         System.out.println("     (runs bedside+nurse+db ladder automatically and writes csv/md/svg for each)");
+        System.out.println("  gui");
+        System.out.println("     (launches a Swing GUI for all scenarios and options)");
     }
 }
 

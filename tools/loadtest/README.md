@@ -10,6 +10,7 @@ This module provides standalone performance tools for the `server` application.
 - `nurse-matrix`: Sweeps multiple nurse-station concurrency levels and writes CSV + Markdown report.
 - `db`: Runs mixed write + aggregate-query pressure on `patient_vitals` and exports CSV (`concurrency -> latency`).
 - `smart-suite`: One command to run low -> medium-low -> medium -> high ladder for bedside + nurse + db and output CSV/Markdown/SVG charts.
+- `gui`: Launches a Swing desktop app to configure and run all scenarios.
 
 `bedside` and `nurse` now also write single-run result files by default:
 
@@ -106,6 +107,27 @@ Available `--profile` values:
 - `quick`: short ladder (fewer levels, fast sanity check)
 - `balanced`: default ladder
 - `high`: higher upper bound for stress runs
+
+## GUI Runner (Swing)
+
+Launch GUI from the default CLI entry:
+
+```powershell
+..\..\mvnw.cmd -f pom.xml exec:java "-Dexec.args=gui"
+```
+
+Or run GUI main class directly:
+
+```powershell
+..\..\mvnw.cmd -f pom.xml exec:java "-Dexec.mainClass=youzi.lin.loadtest.LoadTestGuiMain"
+```
+
+GUI features:
+
+- scenario selection (`bedside`, `nurse`, `bedside-matrix`, `nurse-matrix`, `db`, `smart-suite`)
+- all common options editable in one form (URL, DB, levels, warmup/measure, profile, cleanup)
+- background execution with live log panel
+- expected report path list and one-click open
 
 ## Spring Boot Side Flags
 
