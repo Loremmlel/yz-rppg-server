@@ -31,6 +31,7 @@ final class ServerAppLauncher implements AutoCloseable {
     private final HttpClient httpClient;
 
     private Process process;
+    private Thread shutdownHook;
 
     ServerAppLauncher(Map<String, String> options, Consumer<String> log) {
         this.options = options;
@@ -70,6 +71,7 @@ final class ServerAppLauncher implements AutoCloseable {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.directory(workDir.toFile());
         process = startProcessWithCmdFallback(processBuilder, command, workDir);
+        registerShutdownHook();
 
         startPipe(process.getInputStream(), "OUT");
         startPipe(process.getErrorStream(), "ERR");
@@ -80,6 +82,7 @@ final class ServerAppLauncher implements AutoCloseable {
 
     @Override
     public void close() {
+        unregisterShutdownHook();
         if (process == null) {
             return;
         }
@@ -89,15 +92,8 @@ final class ServerAppLauncher implements AutoCloseable {
         }
 
         log.accept("[server] stopping server process...");
-        process.destroy();
         try {
-            if (!process.waitFor(12, TimeUnit.SECONDS)) {
-                log.accept("[server] force kill server process.");
-                process.destroyForcibly();
-                process.waitFor(5, TimeUnit.SECONDS);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            stopProcessTree(process);
         } finally {
             process = null;
         }
@@ -165,6 +161,63 @@ final class ServerAppLauncher implements AutoCloseable {
                     .directory(workDir.toFile())
                     .start();
         }
+    }
+
+    private void registerShutdownHook() {
+        shutdownHook = new Thread(() -> {
+            Process p = process;
+            if (p != null && p.isAlive()) {
+                try {
+                    stopProcessTree(p);
+                } catch (Exception ignored) {
+                    // best-effort cleanup during JVM shutdown
+                }
+            }
+        }, "loadtest-server-cleanup-hook");
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
+    }
+
+    private void unregisterShutdownHook() {
+        if (shutdownHook == null) {
+            return;
+        }
+        try {
+            Runtime.getRuntime().removeShutdownHook(shutdownHook);
+        } catch (IllegalStateException ignored) {
+            // JVM is shutting down
+        }
+        shutdownHook = null;
+    }
+
+    private void stopProcessTree(Process target) {
+        if (!target.isAlive()) {
+            return;
+        }
+        if (isWindows()) {
+            try {
+                Process killer = new ProcessBuilder("taskkill", "/PID", String.valueOf(target.pid()), "/T", "/F")
+                        .start();
+                killer.waitFor(8, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                log.accept("[server] taskkill failed: " + e.getMessage());
+            }
+        } else {
+            target.destroy();
+        }
+
+        try {
+            if (!target.waitFor(12, TimeUnit.SECONDS) && target.isAlive()) {
+                log.accept("[server] force kill server process.");
+                target.destroyForcibly();
+                target.waitFor(5, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
     private String buildJvmArgs() {

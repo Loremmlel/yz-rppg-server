@@ -82,7 +82,7 @@ final class LoadTestGuiFrame extends JFrame {
 
     LoadTestGuiFrame() {
         super("压测工具图形界面");
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(new Dimension(1200, 760));
         setLocationRelativeTo(null);
 
