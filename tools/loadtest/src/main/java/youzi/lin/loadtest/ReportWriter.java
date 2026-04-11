@@ -21,6 +21,7 @@ final class ReportWriter {
         rows.add(toWsCsvRow(result));
         writeRows(outputCsv, rows);
         writeWsMarkdown(outputMd, scenario + " Result", "concurrency", List.of(result));
+        writeWsRuntimeArtifacts(outputCsv, outputMd, scenario + " Runtime", "concurrency", List.of(result));
     }
 
     static void writeRows(String outputCsv, List<String> rows) throws Exception {
@@ -118,6 +119,104 @@ final class ReportWriter {
                 recvRate,
                 m.recvDelayP95Ms(),
                 m.recvDelayP99Ms());
+    }
+
+    static void writeWsRuntimeArtifacts(String wsOutputCsv,
+                                        String wsOutputMd,
+                                        String title,
+                                        String concurrencyColumn,
+                                        List<WsResult> results) throws Exception {
+        String runtimeCsv = replaceSuffix(wsOutputCsv, ".csv", "-runtime.csv");
+        String runtimeMd = replaceSuffix(wsOutputMd, ".md", "-runtime.md");
+        List<String> rows = new ArrayList<>();
+        rows.add(concurrencyColumn + ",runtime_available,samples,cpu_avg_pct,cpu_p95_pct,cpu_max_pct,heap_avg_mb,heap_p95_mb,heap_max_mb,gc_count,gc_pause_ms,gc_pause_ms_per_sec,threads_avg,threads_max");
+
+        for (WsResult result : results) {
+            RuntimeSummary r = result.runtimeSummary();
+            rows.add(String.format(Locale.ROOT,
+                    "%d,%s,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%.3f,%.3f,%d",
+                    result.concurrency(),
+                    r.available(),
+                    r.sampleCount(),
+                    r.cpuAvgPct(),
+                    r.cpuP95Pct(),
+                    r.cpuMaxPct(),
+                    r.heapAvgMb(),
+                    r.heapP95Mb(),
+                    r.heapMaxMb(),
+                    r.gcCountDelta(),
+                    r.gcTimeDeltaMs(),
+                    r.gcPauseMsPerSec(),
+                    r.threadAvg(),
+                    r.threadMax()));
+        }
+        writeRows(runtimeCsv, rows);
+
+        List<String> lines = new ArrayList<>();
+        lines.add("# " + title);
+        lines.add("");
+        lines.add("| " + concurrencyColumn + " | runtime | cpu avg% | cpu p95% | heap avg(MB) | gc pause(ms) | threads avg | samples |");
+        lines.add("|---:|:---:|---:|---:|---:|---:|---:|---:|");
+        for (WsResult result : results) {
+            RuntimeSummary r = result.runtimeSummary();
+            lines.add(String.format(Locale.ROOT,
+                    "| %d | %s | %.2f | %.2f | %.2f | %d | %.2f | %d |",
+                    result.concurrency(),
+                    r.available() ? "yes" : "no",
+                    r.cpuAvgPct(),
+                    r.cpuP95Pct(),
+                    r.heapAvgMb(),
+                    r.gcTimeDeltaMs(),
+                    r.threadAvg(),
+                    r.sampleCount()));
+        }
+
+        Path mdPath = Path.of(runtimeMd);
+        Path mdParent = mdPath.toAbsolutePath().getParent();
+        if (mdParent != null) {
+            Files.createDirectories(mdParent);
+        }
+        Files.write(mdPath, lines);
+        System.out.println("[report] markdown written: " + mdPath.toAbsolutePath());
+
+        writeWsRuntimeChart(runtimeCsv, title, concurrencyColumn, results);
+    }
+
+    private static void writeWsRuntimeChart(String runtimeCsv,
+                                            String title,
+                                            String concurrencyColumn,
+                                            List<WsResult> results) throws Exception {
+        List<Double> x = new ArrayList<>();
+        List<Double> cpuAvg = new ArrayList<>();
+        List<Double> heapAvg = new ArrayList<>();
+        List<Double> gcPausePerSec = new ArrayList<>();
+
+        for (WsResult result : results) {
+            RuntimeSummary r = result.runtimeSummary();
+            if (!r.available()) {
+                continue;
+            }
+            x.add((double) result.concurrency());
+            cpuAvg.add(r.cpuAvgPct());
+            heapAvg.add(r.heapAvgMb());
+            gcPausePerSec.add(r.gcPauseMsPerSec());
+        }
+
+        if (x.isEmpty()) {
+            return;
+        }
+
+        String chartPath = baseName(runtimeCsv) + "-resource.svg";
+        writeLineChartSvg(chartPath,
+                title + " Resource",
+                concurrencyColumn,
+                "metric",
+                x,
+                Map.of(
+                        "cpu_avg_pct", cpuAvg,
+                        "heap_avg_mb", heapAvg,
+                        "gc_pause_ms_per_sec", gcPausePerSec
+                ));
     }
 
     static void writeBedsideCharts(String outputCsv, List<WsResult> results) throws Exception {
@@ -369,6 +468,13 @@ final class ReportWriter {
             return outputCsv.substring(0, outputCsv.length() - 4);
         }
         return outputCsv;
+    }
+
+    private static String replaceSuffix(String source, String suffix, String replacement) {
+        if (source.toLowerCase(Locale.ROOT).endsWith(suffix)) {
+            return source.substring(0, source.length() - suffix.length()) + replacement;
+        }
+        return source + replacement;
     }
 }
 

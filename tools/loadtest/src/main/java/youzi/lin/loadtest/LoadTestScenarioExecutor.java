@@ -26,11 +26,13 @@ final class LoadTestScenarioExecutor {
             case "bedside" -> {
                 WsResult result = service.runBedside(options);
                 LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+                LoadTestService.printRuntimeSummary(result.label(), result.runtimeSummary());
                 ReportWriter.writeSingleWsResult("bedside", result, options);
             }
             case "nurse" -> {
                 WsResult result = service.runNurse(options);
                 LoadTestService.printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+                LoadTestService.printRuntimeSummary(result.label(), result.runtimeSummary());
                 ReportWriter.writeSingleWsResult("nurse", result, options);
             }
             case "bedside-matrix" -> service.runBedsideMatrix(options);
@@ -50,26 +52,44 @@ final class LoadTestScenarioExecutor {
         List<Path> paths = new ArrayList<>();
         switch (scenario) {
             case "bedside" -> {
-                paths.add(Path.of(CliOptions.get(options, "outputCsv", ".\\results\\bedside-result.csv")));
-                paths.add(Path.of(CliOptions.get(options, "outputMd", ".\\results\\bedside-result.md")));
+                String csv = CliOptions.get(options, "outputCsv", ".\\results\\bedside-result.csv");
+                String md = CliOptions.get(options, "outputMd", ".\\results\\bedside-result.md");
+                paths.add(Path.of(csv));
+                paths.add(Path.of(md));
+                paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
+                paths.add(Path.of(replaceMd(md, "-runtime.md")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
             }
             case "nurse" -> {
-                paths.add(Path.of(CliOptions.get(options, "outputCsv", ".\\results\\nurse-result.csv")));
-                paths.add(Path.of(CliOptions.get(options, "outputMd", ".\\results\\nurse-result.md")));
+                String csv = CliOptions.get(options, "outputCsv", ".\\results\\nurse-result.csv");
+                String md = CliOptions.get(options, "outputMd", ".\\results\\nurse-result.md");
+                paths.add(Path.of(csv));
+                paths.add(Path.of(md));
+                paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
+                paths.add(Path.of(replaceMd(md, "-runtime.md")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
             }
             case "bedside-matrix" -> {
                 String csv = CliOptions.get(options, "outputCsv", ".\\results\\bedside-matrix.csv");
+                String md = CliOptions.get(options, "outputMd", ".\\results\\bedside-matrix.md");
                 paths.add(Path.of(csv));
-                paths.add(Path.of(CliOptions.get(options, "outputMd", ".\\results\\bedside-matrix.md")));
+                paths.add(Path.of(md));
                 paths.add(Path.of(replaceCsv(csv, "-throughput.svg")));
                 paths.add(Path.of(replaceCsv(csv, "-latency.svg")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
+                paths.add(Path.of(replaceMd(md, "-runtime.md")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
             }
             case "nurse-matrix" -> {
                 String csv = CliOptions.get(options, "outputCsv", ".\\results\\nurse-matrix.csv");
+                String md = CliOptions.get(options, "outputMd", ".\\results\\nurse-matrix.md");
                 paths.add(Path.of(csv));
-                paths.add(Path.of(CliOptions.get(options, "outputMd", ".\\results\\nurse-matrix.md")));
+                paths.add(Path.of(md));
                 paths.add(Path.of(replaceCsv(csv, "-throughput.svg")));
                 paths.add(Path.of(replaceCsv(csv, "-latency.svg")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
+                paths.add(Path.of(replaceMd(md, "-runtime.md")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
             }
             case "db" -> {
                 String csv = CliOptions.get(options, "outputCsv", "db-latency.csv");
@@ -84,10 +104,16 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(outDir, "bedside-ladder.md"));
                 paths.add(Path.of(outDir, "bedside-ladder-throughput.svg"));
                 paths.add(Path.of(outDir, "bedside-ladder-latency.svg"));
+                paths.add(Path.of(outDir, "bedside-ladder-runtime.csv"));
+                paths.add(Path.of(outDir, "bedside-ladder-runtime.md"));
+                paths.add(Path.of(outDir, "bedside-ladder-runtime-resource.svg"));
                 paths.add(Path.of(outDir, "nurse-ladder.csv"));
                 paths.add(Path.of(outDir, "nurse-ladder.md"));
                 paths.add(Path.of(outDir, "nurse-ladder-throughput.svg"));
                 paths.add(Path.of(outDir, "nurse-ladder-latency.svg"));
+                paths.add(Path.of(outDir, "nurse-ladder-runtime.csv"));
+                paths.add(Path.of(outDir, "nurse-ladder-runtime.md"));
+                paths.add(Path.of(outDir, "nurse-ladder-runtime-resource.svg"));
                 paths.add(Path.of(outDir, "db-ladder.csv"));
                 paths.add(Path.of(outDir, "db-ladder.md"));
                 paths.add(Path.of(outDir, "db-ladder-throughput.svg"));
@@ -103,6 +129,14 @@ final class LoadTestScenarioExecutor {
         String lower = path.toLowerCase();
         if (lower.endsWith(".csv")) {
             return path.substring(0, path.length() - 4) + suffix;
+        }
+        return path + suffix;
+    }
+
+    private static String replaceMd(String path, String suffix) {
+        String lower = path.toLowerCase();
+        if (lower.endsWith(".md")) {
+            return path.substring(0, path.length() - 3) + suffix;
         }
         return path + suffix;
     }

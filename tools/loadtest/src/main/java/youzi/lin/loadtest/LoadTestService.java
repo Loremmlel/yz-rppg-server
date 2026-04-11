@@ -43,10 +43,14 @@ final class LoadTestService {
         int bedIdStart = CliOptions.getInt(options, "bedIdStart", 1);
         int warmupSec = CliOptions.getInt(options, "warmupSec", 120);
         int measureSec = CliOptions.getInt(options, "measureSec", 180);
+        boolean runtimeEnabled = CliOptions.getBoolean(options, "runtimeMetrics", true);
+        int runtimeIntervalSec = CliOptions.getInt(options, "runtimeSampleIntervalSec", 1);
+        String runtimeEndpoint = CliOptions.get(options, "runtimeEndpoint", RuntimeSampler.defaultRuntimeEndpoint(baseUrl));
 
         Metrics metrics = new Metrics();
         byte[] image = new byte[256 * 256];
         Arrays.fill(image, (byte) 0xFF);
+        RuntimeSampler runtimeSampler = runtimeEnabled ? RuntimeSampler.start(runtimeEndpoint, runtimeIntervalSec) : null;
 
         HttpClient client = HttpClient.newHttpClient();
         AtomicBoolean running = new AtomicBoolean(true);
@@ -96,6 +100,9 @@ final class LoadTestService {
         System.out.printf("[bedside] warmup %ds ...%n", warmupSec);
         TimeUnit.SECONDS.sleep(warmupSec);
         metrics.reset();
+        if (runtimeSampler != null) {
+            runtimeSampler.resetMeasurementWindow();
+        }
 
         System.out.printf("[bedside] measure %ds ...%n", measureSec);
         TimeUnit.SECONDS.sleep(measureSec);
@@ -111,7 +118,10 @@ final class LoadTestService {
             }
         }
 
-        return new WsResult("bedside", beds, measureSec, metrics.snapshot());
+        RuntimeSummary runtimeSummary = runtimeSampler != null
+                ? runtimeSampler.stopAndSummarize(measureSec)
+                : RuntimeSummary.empty();
+        return new WsResult("bedside", beds, measureSec, metrics.snapshot(), runtimeSummary);
     }
 
     WsResult runNurse(Map<String, String> options) throws Exception {
@@ -120,10 +130,14 @@ final class LoadTestService {
         int stations = CliOptions.getInt(options, "stations", 300);
         int warmupSec = CliOptions.getInt(options, "warmupSec", 120);
         int measureSec = CliOptions.getInt(options, "measureSec", 180);
+        boolean runtimeEnabled = CliOptions.getBoolean(options, "runtimeMetrics", true);
+        int runtimeIntervalSec = CliOptions.getInt(options, "runtimeSampleIntervalSec", 1);
+        String runtimeEndpoint = CliOptions.get(options, "runtimeEndpoint", RuntimeSampler.defaultRuntimeEndpoint(baseUrl));
 
         Metrics metrics = new Metrics();
         HttpClient client = HttpClient.newHttpClient();
         List<WebSocket> sockets = new ArrayList<>(stations);
+        RuntimeSampler runtimeSampler = runtimeEnabled ? RuntimeSampler.start(runtimeEndpoint, runtimeIntervalSec) : null;
 
         for (int i = 0; i < stations; i++) {
             var listener = new GenericWsListener(metrics, false);
@@ -139,6 +153,9 @@ final class LoadTestService {
         System.out.printf("[nurse] warmup %ds ...%n", warmupSec);
         TimeUnit.SECONDS.sleep(warmupSec);
         metrics.reset();
+        if (runtimeSampler != null) {
+            runtimeSampler.resetMeasurementWindow();
+        }
 
         System.out.printf("[nurse] measure %ds ...%n", measureSec);
         TimeUnit.SECONDS.sleep(measureSec);
@@ -151,7 +168,10 @@ final class LoadTestService {
             }
         }
 
-        return new WsResult("nurse", stations, measureSec, metrics.snapshot());
+        RuntimeSummary runtimeSummary = runtimeSampler != null
+                ? runtimeSampler.stopAndSummarize(measureSec)
+                : RuntimeSummary.empty();
+        return new WsResult("nurse", stations, measureSec, metrics.snapshot(), runtimeSummary);
     }
 
     void runBedsideMatrix(Map<String, String> options) throws Exception {
@@ -169,12 +189,14 @@ final class LoadTestService {
             WsResult result = runBedside(scenarioOptions);
             results.add(result);
             printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+            printRuntimeSummary(result.label(), result.runtimeSummary());
             rows.add(ReportWriter.toWsCsvRow(result));
         }
 
         ReportWriter.writeRows(outputCsv, rows);
         ReportWriter.writeWsMarkdown(outputMd, "Bedside Matrix", "beds", results);
         ReportWriter.writeBedsideCharts(outputCsv, results);
+        ReportWriter.writeWsRuntimeArtifacts(outputCsv, outputMd, "Bedside Runtime", "beds", results);
     }
 
     void runNurseMatrix(Map<String, String> options) throws Exception {
@@ -192,12 +214,14 @@ final class LoadTestService {
             WsResult result = runNurse(scenarioOptions);
             results.add(result);
             printWsResult(result.label(), result.concurrency(), result.measureSec(), result.metrics());
+            printRuntimeSummary(result.label(), result.runtimeSummary());
             rows.add(ReportWriter.toNurseCsvRow(result));
         }
 
         ReportWriter.writeRows(outputCsv, rows);
         ReportWriter.writeWsMarkdown(outputMd, "Nurse Matrix", "stations", results);
         ReportWriter.writeNurseCharts(outputCsv, results);
+        ReportWriter.writeWsRuntimeArtifacts(outputCsv, outputMd, "Nurse Runtime", "stations", results);
     }
 
     void runDbMixed(Map<String, String> options) throws Exception {
@@ -351,6 +375,27 @@ final class LoadTestService {
                 recvRate,
                 metrics.sendP95Ms(),
                 metrics.recvDelayP95Ms());
+    }
+
+    static void printRuntimeSummary(String label, RuntimeSummary runtimeSummary) {
+        if (!runtimeSummary.available()) {
+            System.out.printf("[%s] runtime metrics unavailable (check /api/loadtest/runtime-snapshot)%n", label);
+            return;
+        }
+        System.out.printf(Locale.ROOT,
+                "[%s] runtime cpu(avg/p95/max)=%.2f/%.2f/%.2f%% heap(avg/p95/max)=%.2f/%.2f/%.2fMB gcPause=%dms gcCount=%d threads(avg/max)=%.1f/%d samples=%d%n",
+                label,
+                runtimeSummary.cpuAvgPct(),
+                runtimeSummary.cpuP95Pct(),
+                runtimeSummary.cpuMaxPct(),
+                runtimeSummary.heapAvgMb(),
+                runtimeSummary.heapP95Mb(),
+                runtimeSummary.heapMaxMb(),
+                runtimeSummary.gcTimeDeltaMs(),
+                runtimeSummary.gcCountDelta(),
+                runtimeSummary.threadAvg(),
+                runtimeSummary.threadMax(),
+                runtimeSummary.sampleCount());
     }
 
     private static void runDbWorker(String jdbcUrl,

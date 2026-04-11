@@ -12,6 +12,23 @@
 - `smart-suite`：一次命令自动执行低/中低/中/高阶梯（病床端 + 护士站 + DB），输出 CSV/Markdown/SVG。
 - `gui`：启动 Swing 图形界面，所有参数可视化配置。
 
+## 资源指标采样（bedside / nurse）
+
+为了解决“推理端被排除后延迟参考性下降”的问题，`bedside` 和 `nurse` 默认会在测量窗口采样应用资源指标：
+
+- 进程 CPU（avg/p95/max）
+- 堆内存（avg/p95/max）
+- GC 次数与 GC 暂停总时长
+- 线程数（avg/max）
+
+默认参数：
+
+- `--runtimeMetrics true`
+- `--runtimeSampleIntervalSec 1`
+- `--runtimeEndpoint` 默认由 `baseUrl` 推导为 `http://<host>/api/loadtest/runtime-snapshot`
+
+`server` 侧需要使用 `loadtest` profile，接口路径：`/api/loadtest/runtime-snapshot`。
+
 默认情况下，`bedside` 与 `nurse` 也会生成单次结果文件：
 
 - `./results/bedside-result.csv`
@@ -130,6 +147,12 @@ GUI 已支持：
 - 按场景动态展示参数
 - 后台运行 + 实时日志
 - 报告路径列表 + 一键打开
+
+`bedside` 与 `nurse`（含 matrix/smart-suite）会额外生成资源报告：
+
+- `*-runtime.csv`
+- `*-runtime.md`
+- `*-runtime-resource.svg`
 
 ## Spring Boot 侧建议开关
 
