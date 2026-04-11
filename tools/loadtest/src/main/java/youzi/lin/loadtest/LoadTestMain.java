@@ -61,6 +61,7 @@ public final class LoadTestMain {
             case "bedside-matrix" -> runBedsideMatrix(options);
             case "nurse-matrix" -> runNurseMatrix(options);
             case "db" -> runDbMixed(options);
+            case "smart-suite" -> runSmartSuite(options);
             default -> {
                 System.out.println("Unknown scenario: " + scenario);
                 printUsage();
@@ -187,7 +188,7 @@ public final class LoadTestMain {
     }
 
     private static void runBedsideMatrix(Map<String, String> options) throws Exception {
-        List<Integer> levels = CliOptions.getIntList(options, "bedsLevels", "16,32,64,128,256");
+        List<Integer> levels = resolveLevels(options, "bedsLevels", levelsForProfile("bedside", CliOptions.get(options, "profile", "balanced")));
         String outputCsv = CliOptions.get(options, "outputCsv", ".\\results\\bedside-matrix.csv");
         String outputMd = CliOptions.get(options, "outputMd", ".\\results\\bedside-matrix.md");
 
@@ -206,10 +207,11 @@ public final class LoadTestMain {
 
         writeRows(outputCsv, rows);
         writeWsMarkdown(outputMd, "Bedside Matrix", "beds", results);
+        writeBedsideCharts(outputCsv, results);
     }
 
     private static void runNurseMatrix(Map<String, String> options) throws Exception {
-        List<Integer> levels = CliOptions.getIntList(options, "stationsLevels", "50,100,200,500,1000");
+        List<Integer> levels = resolveLevels(options, "stationsLevels", levelsForProfile("nurse", CliOptions.get(options, "profile", "balanced")));
         String outputCsv = CliOptions.get(options, "outputCsv", ".\\results\\nurse-matrix.csv");
         String outputMd = CliOptions.get(options, "outputMd", ".\\results\\nurse-matrix.md");
 
@@ -228,6 +230,7 @@ public final class LoadTestMain {
 
         writeRows(outputCsv, rows);
         writeWsMarkdown(outputMd, "Nurse Matrix", "stations", results);
+        writeNurseCharts(outputCsv, results);
     }
 
     private static void runDbMixed(Map<String, String> options) throws Exception {
@@ -246,7 +249,7 @@ public final class LoadTestMain {
         int bedEnd = CliOptions.getInt(options, "bedEnd", 64);
         int patientStart = CliOptions.getInt(options, "patientStart", 1);
         int patientEnd = CliOptions.getInt(options, "patientEnd", 256);
-        List<Integer> levels = CliOptions.getIntList(options, "concurrencyLevels", "16,32,64,128");
+        List<Integer> levels = resolveLevels(options, "concurrencyLevels", levelsForProfile("db", CliOptions.get(options, "profile", "balanced")));
         double markerLatency = -9000d - Math.abs(runTag.hashCode() % 500);
 
         List<String> rows = new ArrayList<>();
@@ -304,6 +307,7 @@ public final class LoadTestMain {
             rows.add(line);
             results.add(new DbResult(
                     concurrency,
+                    measureSec,
                     metrics.writeOps.sum(),
                     metrics.readOps.sum(),
                     percentileMs(metrics.writeLatencyMicros, 95.0),
@@ -318,6 +322,7 @@ public final class LoadTestMain {
 
         writeRows(outputCsv, rows);
         writeDbMarkdown(outputMd, results);
+        writeDbCharts(outputCsv, results);
 
         if (cleanup) {
             int deleted = cleanupDbData(
@@ -336,6 +341,65 @@ public final class LoadTestMain {
                     "[db] cleanup enabled, runTag=%s, markerLatency=%.0f, deletedRows=%d%n",
                     runTag, markerLatency, deleted);
         }
+    }
+
+    private static void runSmartSuite(Map<String, String> options) throws Exception {
+        String outDir = CliOptions.get(options, "outDir", ".\\results");
+        String profile = CliOptions.get(options, "profile", "balanced");
+
+        System.out.printf("[smart-suite] profile=%s outDir=%s%n", profile, java.nio.file.Path.of(outDir).toAbsolutePath());
+
+        var bedsideOptions = new java.util.HashMap<>(options);
+        bedsideOptions.put("profile", profile);
+        bedsideOptions.put("outputCsv", outDir + "\\bedside-ladder.csv");
+        bedsideOptions.put("outputMd", outDir + "\\bedside-ladder.md");
+        runBedsideMatrix(bedsideOptions);
+
+        var nurseOptions = new java.util.HashMap<>(options);
+        nurseOptions.put("profile", profile);
+        nurseOptions.put("outputCsv", outDir + "\\nurse-ladder.csv");
+        nurseOptions.put("outputMd", outDir + "\\nurse-ladder.md");
+        runNurseMatrix(nurseOptions);
+
+        var dbOptions = new java.util.HashMap<>(options);
+        dbOptions.put("profile", profile);
+        dbOptions.put("outputCsv", outDir + "\\db-ladder.csv");
+        dbOptions.put("outputMd", outDir + "\\db-ladder.md");
+        runDbMixed(dbOptions);
+    }
+
+    private static List<Integer> resolveLevels(Map<String, String> options, String key, List<Integer> fallback) {
+        String raw = options.get(key);
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        return CliOptions.getIntList(options, key, joinLevels(fallback));
+    }
+
+    private static String joinLevels(List<Integer> values) {
+        return values.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private static List<Integer> levelsForProfile(String target, String profile) {
+        String normalized = profile.toLowerCase(Locale.ROOT);
+        return switch (target) {
+            case "bedside" -> switch (normalized) {
+                case "quick" -> List.of(8, 16, 32);
+                case "high" -> List.of(32, 64, 128, 256, 384);
+                default -> List.of(16, 32, 64, 128, 256);
+            };
+            case "nurse" -> switch (normalized) {
+                case "quick" -> List.of(20, 50, 100);
+                case "high" -> List.of(100, 200, 500, 1000, 1500);
+                default -> List.of(50, 100, 200, 500, 1000);
+            };
+            case "db" -> switch (normalized) {
+                case "quick" -> List.of(4, 8, 16);
+                case "high" -> List.of(32, 64, 128, 192, 256);
+                default -> List.of(16, 32, 64, 128);
+            };
+            default -> throw new IllegalArgumentException("Unsupported profile target: " + target);
+        };
     }
 
     private static void runDbWorker(String jdbcUrl,
@@ -585,6 +649,258 @@ public final class LoadTestMain {
         System.out.println("[report] markdown written: " + path.toAbsolutePath());
     }
 
+    private static void writeBedsideCharts(String outputCsv, List<WsResult> results) throws Exception {
+        List<Double> x = new ArrayList<>();
+        List<Double> sendRate = new ArrayList<>();
+        List<Double> recvRate = new ArrayList<>();
+        List<Double> sendP95 = new ArrayList<>();
+        List<Double> recvP95 = new ArrayList<>();
+
+        for (WsResult result : results) {
+            WsSnapshot m = result.metrics();
+            double seconds = Math.max(1, result.measureSec());
+            x.add((double) result.concurrency());
+            sendRate.add(m.sent() / seconds);
+            recvRate.add(m.received() / seconds);
+            sendP95.add(m.sendP95Ms());
+            recvP95.add(m.recvDelayP95Ms());
+        }
+
+        String base = baseName(outputCsv);
+        writeLineChartSvg(base + "-throughput.svg",
+                "Bedside Throughput vs Beds",
+                "Beds",
+                "Messages/sec",
+                x,
+                Map.of("send_rate", sendRate, "recv_rate", recvRate));
+        writeLineChartSvg(base + "-latency.svg",
+                "Bedside Latency vs Beds",
+                "Beds",
+                "Latency (ms)",
+                x,
+                Map.of("send_p95", sendP95, "recv_delay_p95", recvP95));
+    }
+
+    private static void writeNurseCharts(String outputCsv, List<WsResult> results) throws Exception {
+        List<Double> x = new ArrayList<>();
+        List<Double> recvRate = new ArrayList<>();
+        List<Double> recvP95 = new ArrayList<>();
+        List<Double> recvP99 = new ArrayList<>();
+
+        for (WsResult result : results) {
+            WsSnapshot m = result.metrics();
+            double seconds = Math.max(1, result.measureSec());
+            x.add((double) result.concurrency());
+            recvRate.add(m.received() / seconds);
+            recvP95.add(m.recvDelayP95Ms());
+            recvP99.add(m.recvDelayP99Ms());
+        }
+
+        String base = baseName(outputCsv);
+        writeLineChartSvg(base + "-throughput.svg",
+                "Nurse Throughput vs Stations",
+                "Stations",
+                "Messages/sec",
+                x,
+                Map.of("recv_rate", recvRate));
+        writeLineChartSvg(base + "-latency.svg",
+                "Nurse Latency vs Stations",
+                "Stations",
+                "Latency (ms)",
+                x,
+                Map.of("recv_delay_p95", recvP95, "recv_delay_p99", recvP99));
+    }
+
+    private static void writeDbCharts(String outputCsv, List<DbResult> results) throws Exception {
+        List<Double> x = new ArrayList<>();
+        List<Double> writeTps = new ArrayList<>();
+        List<Double> readTps = new ArrayList<>();
+        List<Double> writeP95 = new ArrayList<>();
+        List<Double> readP95 = new ArrayList<>();
+        List<Double> writeP99 = new ArrayList<>();
+        List<Double> readP99 = new ArrayList<>();
+
+        for (DbResult result : results) {
+            x.add((double) result.concurrency());
+            double seconds = Math.max(1, result.measureSec());
+            writeTps.add(result.writeOps() / seconds);
+            readTps.add(result.readOps() / seconds);
+            writeP95.add(result.writeP95Ms());
+            readP95.add(result.readP95Ms());
+            writeP99.add(result.writeP99Ms());
+            readP99.add(result.readP99Ms());
+        }
+
+        String base = baseName(outputCsv);
+        writeLineChartSvg(base + "-throughput.svg",
+                "DB Throughput vs Concurrency",
+                "Concurrency",
+                "Ops/sec",
+                x,
+                Map.of("write_ops", writeTps, "read_ops", readTps));
+        writeLineChartSvg(base + "-latency.svg",
+                "DB Latency vs Concurrency",
+                "Concurrency",
+                "Latency (ms)",
+                x,
+                Map.of("write_p95", writeP95, "read_p95", readP95, "write_p99", writeP99, "read_p99", readP99));
+    }
+
+    private static void writeLineChartSvg(String outputPath,
+                                          String title,
+                                          String xLabel,
+                                          String yLabel,
+                                          List<Double> xValues,
+                                          Map<String, List<Double>> seriesMap) throws Exception {
+        if (xValues.isEmpty() || seriesMap.isEmpty()) {
+            return;
+        }
+
+        int width = 980;
+        int height = 540;
+        int left = 70;
+        int right = 20;
+        int top = 50;
+        int bottom = 60;
+        int plotWidth = width - left - right;
+        int plotHeight = height - top - bottom;
+
+        double minX = xValues.stream().mapToDouble(Double::doubleValue).min().orElse(0);
+        double maxX = xValues.stream().mapToDouble(Double::doubleValue).max().orElse(1);
+        if (maxX <= minX) {
+            maxX = minX + 1;
+        }
+
+        double minY = 0;
+        double maxY = seriesMap.values().stream()
+                .flatMap(List::stream)
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .orElse(1.0);
+        if (maxY <= minY) {
+            maxY = 1;
+        }
+        maxY *= 1.1;
+
+        String[] palette = new String[]{"#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c"};
+        StringBuilder svg = new StringBuilder();
+        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"").append(width)
+                .append("\" height=\"").append(height).append("\">\n");
+        svg.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>\n");
+        svg.append("<text x=\"").append(width / 2).append("\" y=\"28\" text-anchor=\"middle\" font-size=\"20\" font-family=\"Arial\">")
+                .append(title).append("</text>\n");
+
+        svg.append("<line x1=\"").append(left).append("\" y1=\"").append(top + plotHeight)
+                .append("\" x2=\"").append(left + plotWidth).append("\" y2=\"").append(top + plotHeight)
+                .append("\" stroke=\"#111827\"/>\n");
+        svg.append("<line x1=\"").append(left).append("\" y1=\"").append(top)
+                .append("\" x2=\"").append(left).append("\" y2=\"").append(top + plotHeight)
+                .append("\" stroke=\"#111827\"/>\n");
+
+        int ticks = 5;
+        for (int i = 0; i <= ticks; i++) {
+            double ratio = i / (double) ticks;
+            int y = (int) Math.round(top + plotHeight - ratio * plotHeight);
+            double value = minY + ratio * (maxY - minY);
+            svg.append("<line x1=\"").append(left).append("\" y1=\"").append(y)
+                    .append("\" x2=\"").append(left + plotWidth)
+                    .append("\" y2=\"").append(y)
+                    .append("\" stroke=\"#e5e7eb\"/>\n");
+            svg.append("<text x=\"").append(left - 8).append("\" y=\"").append(y + 4)
+                    .append("\" text-anchor=\"end\" font-size=\"12\" font-family=\"Arial\">")
+                    .append(String.format(Locale.ROOT, "%.1f", value)).append("</text>\n");
+        }
+
+        for (int i = 0; i < xValues.size(); i++) {
+            double xRaw = xValues.get(i);
+            int x = mapX(xRaw, minX, maxX, left, plotWidth);
+            svg.append("<line x1=\"").append(x).append("\" y1=\"").append(top)
+                    .append("\" x2=\"").append(x).append("\" y2=\"").append(top + plotHeight)
+                    .append("\" stroke=\"#f3f4f6\"/>\n");
+            svg.append("<text x=\"").append(x).append("\" y=\"").append(top + plotHeight + 20)
+                    .append("\" text-anchor=\"middle\" font-size=\"12\" font-family=\"Arial\">")
+                    .append(trimDouble(xRaw)).append("</text>\n");
+        }
+
+        int colorIndex = 0;
+        int legendY = top + 12;
+        for (Map.Entry<String, List<Double>> entry : seriesMap.entrySet()) {
+            String color = palette[colorIndex % palette.length];
+            colorIndex++;
+
+            List<Double> series = entry.getValue();
+            if (series.size() != xValues.size()) {
+                continue;
+            }
+
+            StringBuilder points = new StringBuilder();
+            for (int i = 0; i < xValues.size(); i++) {
+                int x = mapX(xValues.get(i), minX, maxX, left, plotWidth);
+                int y = mapY(series.get(i), minY, maxY, top, plotHeight);
+                points.append(x).append(',').append(y).append(' ');
+            }
+            svg.append("<polyline fill=\"none\" stroke=\"").append(color)
+                    .append("\" stroke-width=\"2\" points=\"").append(points.toString().trim()).append("\"/>\n");
+
+            for (int i = 0; i < xValues.size(); i++) {
+                int x = mapX(xValues.get(i), minX, maxX, left, plotWidth);
+                int y = mapY(series.get(i), minY, maxY, top, plotHeight);
+                svg.append("<circle cx=\"").append(x).append("\" cy=\"").append(y)
+                        .append("\" r=\"3\" fill=\"").append(color).append("\"/>\n");
+            }
+
+            int legendX = width - right - 190;
+            svg.append("<line x1=\"").append(legendX).append("\" y1=\"").append(legendY)
+                    .append("\" x2=\"").append(legendX + 24).append("\" y2=\"").append(legendY)
+                    .append("\" stroke=\"").append(color).append("\" stroke-width=\"3\"/>\n");
+            svg.append("<text x=\"").append(legendX + 30).append("\" y=\"").append(legendY + 4)
+                    .append("\" font-size=\"12\" font-family=\"Arial\">")
+                    .append(entry.getKey()).append("</text>\n");
+            legendY += 20;
+        }
+
+        svg.append("<text x=\"").append(left + plotWidth / 2).append("\" y=\"").append(height - 15)
+                .append("\" text-anchor=\"middle\" font-size=\"13\" font-family=\"Arial\">")
+                .append(xLabel).append("</text>\n");
+        svg.append("<text x=\"18\" y=\"").append(top + plotHeight / 2)
+                .append("\" transform=\"rotate(-90 18 ").append(top + plotHeight / 2)
+                .append(")\" text-anchor=\"middle\" font-size=\"13\" font-family=\"Arial\">")
+                .append(yLabel).append("</text>\n");
+        svg.append("</svg>\n");
+
+        java.nio.file.Path path = java.nio.file.Path.of(outputPath);
+        java.nio.file.Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            java.nio.file.Files.createDirectories(parent);
+        }
+        java.nio.file.Files.writeString(path, svg.toString());
+        System.out.println("[report] chart written: " + path.toAbsolutePath());
+    }
+
+    private static int mapX(double value, double minX, double maxX, int left, int plotWidth) {
+        double ratio = (value - minX) / (maxX - minX);
+        return (int) Math.round(left + ratio * plotWidth);
+    }
+
+    private static int mapY(double value, double minY, double maxY, int top, int plotHeight) {
+        double ratio = (value - minY) / (maxY - minY);
+        return (int) Math.round(top + plotHeight - ratio * plotHeight);
+    }
+
+    private static String trimDouble(double value) {
+        if (Math.abs(value - Math.rint(value)) < 1e-6) {
+            return String.format(Locale.ROOT, "%.0f", value);
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    private static String baseName(String outputCsv) {
+        if (outputCsv.toLowerCase(Locale.ROOT).endsWith(".csv")) {
+            return outputCsv.substring(0, outputCsv.length() - 4);
+        }
+        return outputCsv;
+    }
+
     private static double percentileMs(ConcurrentHistogram histogram, double p) {
         if (histogram.getTotalCount() == 0) {
             return 0.0;
@@ -602,12 +918,14 @@ public final class LoadTestMain {
         System.out.println("Usage:");
         System.out.println("  bedside --baseUrl ws://localhost:8080 --beds 64 --fps 15 --warmupSec 120 --measureSec 180");
         System.out.println("     (writes .\\results\\bedside-result.csv and .\\results\\bedside-result.md by default)");
-        System.out.println("  bedside-matrix --baseUrl ws://localhost:8080 --bedsLevels 16,32,64,128,256 --fps 15 --outputCsv .\\results\\bedside-matrix.csv --outputMd .\\results\\bedside-matrix.md");
+        System.out.println("  bedside-matrix --baseUrl ws://localhost:8080 --bedsLevels 16,32,64,128,256 --profile balanced --fps 15 --outputCsv .\\results\\bedside-matrix.csv --outputMd .\\results\\bedside-matrix.md");
         System.out.println("  nurse --baseUrl ws://localhost:8080 --wardCode 内科一区 --stations 500 --warmupSec 120 --measureSec 180");
         System.out.println("     (writes .\\results\\nurse-result.csv and .\\results\\nurse-result.md by default)");
-        System.out.println("  nurse-matrix --baseUrl ws://localhost:8080 --wardCode 内科一区 --stationsLevels 50,100,200,500,1000 --outputCsv .\\results\\nurse-matrix.csv --outputMd .\\results\\nurse-matrix.md");
+        System.out.println("  nurse-matrix --baseUrl ws://localhost:8080 --wardCode 内科一区 --stationsLevels 50,100,200,500,1000 --profile balanced --outputCsv .\\results\\nurse-matrix.csv --outputMd .\\results\\nurse-matrix.md");
         System.out.println("  db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 \\");
-        System.out.println("     --concurrencyLevels 16,32,64,128 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --cleanup true --outputCsv .\\results\\db-latency.csv --outputMd .\\results\\db-latency.md");
+        System.out.println("     --concurrencyLevels 16,32,64,128 --profile balanced --writeRatio 0.8 --warmupSec 120 --measureSec 180 --cleanup true --outputCsv .\\results\\db-latency.csv --outputMd .\\results\\db-latency.md");
+        System.out.println("  smart-suite --baseUrl ws://localhost:8080 --wardCode 内科一区 --profile balanced --outDir .\\results --warmupSec 30 --measureSec 60");
+        System.out.println("     (runs bedside+nurse+db ladder automatically and writes csv/md/svg for each)");
     }
 
     private static final class GenericWsListener implements WebSocket.Listener {
@@ -701,6 +1019,7 @@ public final class LoadTestMain {
     }
 
     private record DbResult(int concurrency,
+                            int measureSec,
                             long writeOps,
                             long readOps,
                             double writeP95Ms,

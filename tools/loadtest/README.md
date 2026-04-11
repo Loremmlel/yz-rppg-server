@@ -9,6 +9,7 @@ This module provides standalone performance tools for the `server` application.
 - `bedside-matrix`: Sweeps multiple bedside concurrency levels and writes CSV + Markdown report.
 - `nurse-matrix`: Sweeps multiple nurse-station concurrency levels and writes CSV + Markdown report.
 - `db`: Runs mixed write + aggregate-query pressure on `patient_vitals` and exports CSV (`concurrency -> latency`).
+- `smart-suite`: One command to run low -> medium-low -> medium -> high ladder for bedside + nurse + db and output CSV/Markdown/SVG charts.
 
 `bedside` and `nurse` now also write single-run result files by default:
 
@@ -88,6 +89,23 @@ Disable cleanup only when you need to keep generated rows:
 ```powershell
 python .\plot_latency.py --csv .\results\db-latency.csv --out .\results\db-latency.png
 ```
+
+`*-matrix` and `smart-suite` now also generate SVG charts automatically next to CSV files:
+
+- `*-throughput.svg`
+- `*-latency.svg`
+
+## One-Command Smart Ladder
+
+```powershell
+..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="smart-suite --baseUrl ws://localhost:8080 --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --wardCode 内科一区 --profile balanced --outDir .\results --warmupSec 30 --measureSec 60 --cleanup true"
+```
+
+Available `--profile` values:
+
+- `quick`: short ladder (fewer levels, fast sanity check)
+- `balanced`: default ladder
+- `high`: higher upper bound for stress runs
 
 ## Spring Boot Side Flags
 
