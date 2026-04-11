@@ -30,6 +30,7 @@ class NurseScenarioApp:
         self.snapshot_version = None
         self.drop_next_batch = False
         self.last_subscribe_request_id = None
+        self.is_closing = False
 
         self._build_ui()
         self.root.after(200, self._drain_log_queue)
@@ -127,15 +128,23 @@ class NurseScenarioApp:
         self.log_queue.put(msg)
 
     def _drain_log_queue(self):
+        if self.is_closing:
+            return
         while True:
             try:
                 msg = self.log_queue.get_nowait()
             except queue.Empty:
                 break
             ts = time.strftime("%H:%M:%S")
-            self.log_text.insert(tk.END, f"[{ts}] {msg}\n")
-            self.log_text.see(tk.END)
-        self.root.after(200, self._drain_log_queue)
+            try:
+                self.log_text.insert(tk.END, f"[{ts}] {msg}\n")
+                self.log_text.see(tk.END)
+            except tk.TclError:
+                return
+        try:
+            self.root.after(200, self._drain_log_queue)
+        except tk.TclError:
+            return
 
     def clear_log(self):
         self.log_text.delete("1.0", tk.END)
@@ -206,16 +215,51 @@ class NurseScenarioApp:
         if not proc or not proc.stdout:
             return
         for line in proc.stdout:
+            if self.is_closing:
+                break
             line = line.rstrip()
             if line:
                 self.log(f"[SERVER] {line}")
 
-    def stop_server(self):
-        if not self.server_process or self.server_process.poll() is not None:
-            self.log("主应用未运行")
+    def _kill_process_tree(self, pid: int):
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+    def stop_server(self, quiet: bool = False):
+        proc = self.server_process
+        if not proc:
+            if not quiet:
+                self.log("主应用未运行")
             return
-        self.server_process.terminate()
-        self.log("已发送停止信号给主应用")
+
+        if proc.poll() is not None:
+            self.server_process = None
+            if not quiet:
+                self.log("主应用未运行")
+            return
+
+        pid = proc.pid
+        proc.terminate()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pass
+
+        if proc.poll() is None:
+            # Windows 下通过 /T 杀整棵进程树，避免残留 java/mvnw 子进程。
+            self._kill_process_tree(pid)
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
+        self.server_process = None
+        if not quiet:
+            self.log("主应用及子进程已停止")
 
     def check_runtime_snapshot(self):
         def run():
@@ -355,6 +399,13 @@ class NurseScenarioApp:
             self.ws_app = None
             self.log("已请求关闭 WS")
 
+    def shutdown(self):
+        if self.is_closing:
+            return
+        self.is_closing = True
+        self.disconnect_ws()
+        self.stop_server(quiet=True)
+
     def simulate_packet_loss(self):
         self.drop_next_batch = True
         self.log("下一条 batch_update 将被本地丢弃，用于验证断档重订阅")
@@ -441,8 +492,7 @@ def main():
     app = NurseScenarioApp(root)
 
     def on_close():
-        app.disconnect_ws()
-        app.stop_server()
+        app.shutdown()
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
