@@ -62,6 +62,7 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
                 paths.add(Path.of(replaceMd(md, "-runtime.md")));
                 paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-heap.svg")));
             }
             case "nurse" -> {
                 String csv = CliOptions.get(options, "outputCsv", ".\\results\\nurse-result.csv");
@@ -71,6 +72,7 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
                 paths.add(Path.of(replaceMd(md, "-runtime.md")));
                 paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-heap.svg")));
             }
             case "bedside-matrix" -> {
                 String csv = CliOptions.get(options, "outputCsv", ".\\results\\bedside-matrix.csv");
@@ -82,6 +84,7 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
                 paths.add(Path.of(replaceMd(md, "-runtime.md")));
                 paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-heap.svg")));
             }
             case "nurse-matrix" -> {
                 String csv = CliOptions.get(options, "outputCsv", ".\\results\\nurse-matrix.csv");
@@ -93,6 +96,7 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(replaceCsv(csv, "-runtime.csv")));
                 paths.add(Path.of(replaceMd(md, "-runtime.md")));
                 paths.add(Path.of(replaceCsv(csv, "-runtime-resource.svg")));
+                paths.add(Path.of(replaceCsv(csv, "-runtime-heap.svg")));
             }
             case "db" -> {
                 String csv = CliOptions.get(options, "outputCsv", "db-latency.csv");
@@ -110,6 +114,7 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(outDir, "bedside-ladder-runtime.csv"));
                 paths.add(Path.of(outDir, "bedside-ladder-runtime.md"));
                 paths.add(Path.of(outDir, "bedside-ladder-runtime-resource.svg"));
+                paths.add(Path.of(outDir, "bedside-ladder-runtime-heap.svg"));
                 paths.add(Path.of(outDir, "nurse-ladder.csv"));
                 paths.add(Path.of(outDir, "nurse-ladder.md"));
                 paths.add(Path.of(outDir, "nurse-ladder-throughput.svg"));
@@ -117,6 +122,7 @@ final class LoadTestScenarioExecutor {
                 paths.add(Path.of(outDir, "nurse-ladder-runtime.csv"));
                 paths.add(Path.of(outDir, "nurse-ladder-runtime.md"));
                 paths.add(Path.of(outDir, "nurse-ladder-runtime-resource.svg"));
+                paths.add(Path.of(outDir, "nurse-ladder-runtime-heap.svg"));
                 paths.add(Path.of(outDir, "db-ladder.csv"));
                 paths.add(Path.of(outDir, "db-ladder.md"));
                 paths.add(Path.of(outDir, "db-ladder-throughput.svg"));

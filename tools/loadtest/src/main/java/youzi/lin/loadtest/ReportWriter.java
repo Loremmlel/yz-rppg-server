@@ -207,16 +207,182 @@ final class ReportWriter {
         }
 
         String chartPath = baseName(runtimeCsv) + "-resource.svg";
-        writeLineChartSvg(chartPath,
-                title + " Resource",
+        writeDualAxisChartSvg(chartPath,
+                title + " Resource (CPU + GC)",
                 concurrencyColumn,
-                "metric",
+                "CPU avg (%)",
+                "GC pause (ms/s)",
                 x,
-                Map.of(
-                        "cpu_avg_pct", cpuAvg,
-                        "heap_avg_mb", heapAvg,
-                        "gc_pause_ms_per_sec", gcPausePerSec
-                ));
+                "cpu_avg_pct",
+                cpuAvg,
+                "gc_pause_ms_per_sec",
+                gcPausePerSec,
+                true);
+
+        writeLineChartSvg(baseName(runtimeCsv) + "-heap.svg",
+                title + " Heap",
+                concurrencyColumn,
+                "Heap avg (MB)",
+                x,
+                Map.of("heap_avg_mb", heapAvg));
+    }
+
+    private static void writeDualAxisChartSvg(String outputPath,
+                                              String title,
+                                              String xLabel,
+                                              String leftLabel,
+                                              String rightLabel,
+                                              List<Double> xValues,
+                                              String leftSeriesName,
+                                              List<Double> leftSeries,
+                                              String rightSeriesName,
+                                              List<Double> rightSeries,
+                                              boolean keepLeftAtLeast100) throws Exception {
+        if (xValues.isEmpty() || leftSeries.size() != xValues.size() || rightSeries.size() != xValues.size()) {
+            return;
+        }
+
+        int width = 980;
+        int height = 540;
+        int left = 70;
+        int right = 70;
+        int top = 50;
+        int bottom = 60;
+        int plotWidth = width - left - right;
+        int plotHeight = height - top - bottom;
+
+        double minX = xValues.stream().mapToDouble(Double::doubleValue).min().orElse(0);
+        double maxX = xValues.stream().mapToDouble(Double::doubleValue).max().orElse(1);
+        if (maxX <= minX) {
+            maxX = minX + 1;
+        }
+
+        double leftMin = 0;
+        double leftMax = leftSeries.stream().mapToDouble(Double::doubleValue).max().orElse(1.0) * 1.1;
+        if (keepLeftAtLeast100) {
+            leftMax = Math.max(100.0, leftMax);
+        }
+        if (leftMax <= leftMin) {
+            leftMax = 1;
+        }
+
+        double rightMin = 0;
+        double rightMax = rightSeries.stream().mapToDouble(Double::doubleValue).max().orElse(1.0) * 1.1;
+        if (rightMax <= rightMin) {
+            rightMax = 1;
+        }
+
+        String leftColor = "#2563eb";
+        String rightColor = "#dc2626";
+        StringBuilder svg = new StringBuilder();
+        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"").append(width)
+                .append("\" height=\"").append(height).append("\">\n");
+        svg.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>\n");
+        svg.append("<text x=\"").append(width / 2).append("\" y=\"28\" text-anchor=\"middle\" font-size=\"20\" font-family=\"Arial\">")
+                .append(title).append("</text>\n");
+
+        int plotBottom = top + plotHeight;
+        int plotRight = left + plotWidth;
+        svg.append("<line x1=\"").append(left).append("\" y1=\"").append(plotBottom)
+                .append("\" x2=\"").append(plotRight).append("\" y2=\"").append(plotBottom)
+                .append("\" stroke=\"#111827\"/>\n");
+        svg.append("<line x1=\"").append(left).append("\" y1=\"").append(top)
+                .append("\" x2=\"").append(left).append("\" y2=\"").append(plotBottom)
+                .append("\" stroke=\"").append(leftColor).append("\"/>\n");
+        svg.append("<line x1=\"").append(plotRight).append("\" y1=\"").append(top)
+                .append("\" x2=\"").append(plotRight).append("\" y2=\"").append(plotBottom)
+                .append("\" stroke=\"").append(rightColor).append("\"/>\n");
+
+        int ticks = 5;
+        for (int i = 0; i <= ticks; i++) {
+            double ratio = i / (double) ticks;
+            int y = (int) Math.round(top + plotHeight - ratio * plotHeight);
+            double leftValue = leftMin + ratio * (leftMax - leftMin);
+            double rightValue = rightMin + ratio * (rightMax - rightMin);
+
+            svg.append("<line x1=\"").append(left).append("\" y1=\"").append(y)
+                    .append("\" x2=\"").append(plotRight)
+                    .append("\" y2=\"").append(y)
+                    .append("\" stroke=\"#e5e7eb\"/>\n");
+            svg.append("<text x=\"").append(left - 8).append("\" y=\"").append(y + 4)
+                    .append("\" text-anchor=\"end\" font-size=\"12\" fill=\"").append(leftColor).append("\" font-family=\"Arial\">")
+                    .append(String.format(Locale.ROOT, "%.1f", leftValue)).append("</text>\n");
+            svg.append("<text x=\"").append(plotRight + 8).append("\" y=\"").append(y + 4)
+                    .append("\" text-anchor=\"start\" font-size=\"12\" fill=\"").append(rightColor).append("\" font-family=\"Arial\">")
+                    .append(String.format(Locale.ROOT, "%.1f", rightValue)).append("</text>\n");
+        }
+
+        for (Double xRaw : xValues) {
+            int x = mapX(xRaw, minX, maxX, left, plotWidth);
+            svg.append("<line x1=\"").append(x).append("\" y1=\"").append(top)
+                    .append("\" x2=\"").append(x).append("\" y2=\"").append(plotBottom)
+                    .append("\" stroke=\"#f3f4f6\"/>\n");
+            svg.append("<text x=\"").append(x).append("\" y=\"").append(plotBottom + 20)
+                    .append("\" text-anchor=\"middle\" font-size=\"12\" font-family=\"Arial\">")
+                    .append(trimDouble(xRaw)).append("</text>\n");
+        }
+
+        StringBuilder leftPoints = new StringBuilder();
+        StringBuilder rightPoints = new StringBuilder();
+        for (int i = 0; i < xValues.size(); i++) {
+            int x = mapX(xValues.get(i), minX, maxX, left, plotWidth);
+            int yLeft = mapY(leftSeries.get(i), leftMin, leftMax, top, plotHeight);
+            int yRight = mapY(rightSeries.get(i), rightMin, rightMax, top, plotHeight);
+            leftPoints.append(x).append(',').append(yLeft).append(' ');
+            rightPoints.append(x).append(',').append(yRight).append(' ');
+        }
+
+        svg.append("<polyline fill=\"none\" stroke=\"").append(leftColor)
+                .append("\" stroke-width=\"2\" points=\"").append(leftPoints.toString().trim()).append("\"/>\n");
+        svg.append("<polyline fill=\"none\" stroke=\"").append(rightColor)
+                .append("\" stroke-width=\"2\" points=\"").append(rightPoints.toString().trim()).append("\"/>\n");
+
+        for (int i = 0; i < xValues.size(); i++) {
+            int x = mapX(xValues.get(i), minX, maxX, left, plotWidth);
+            int yLeft = mapY(leftSeries.get(i), leftMin, leftMax, top, plotHeight);
+            int yRight = mapY(rightSeries.get(i), rightMin, rightMax, top, plotHeight);
+            svg.append("<circle cx=\"").append(x).append("\" cy=\"").append(yLeft)
+                    .append("\" r=\"3\" fill=\"").append(leftColor).append("\"/>\n");
+            svg.append("<circle cx=\"").append(x).append("\" cy=\"").append(yRight)
+                    .append("\" r=\"3\" fill=\"").append(rightColor).append("\"/>\n");
+        }
+
+        int legendX = width - right - 220;
+        int legendY = top + 12;
+        svg.append("<line x1=\"").append(legendX).append("\" y1=\"").append(legendY)
+                .append("\" x2=\"").append(legendX + 24).append("\" y2=\"").append(legendY)
+                .append("\" stroke=\"").append(leftColor).append("\" stroke-width=\"3\"/>\n");
+        svg.append("<text x=\"").append(legendX + 30).append("\" y=\"").append(legendY + 4)
+                .append("\" font-size=\"12\" font-family=\"Arial\">")
+                .append(leftSeriesName).append(" (left)").append("</text>\n");
+        legendY += 20;
+        svg.append("<line x1=\"").append(legendX).append("\" y1=\"").append(legendY)
+                .append("\" x2=\"").append(legendX + 24).append("\" y2=\"").append(legendY)
+                .append("\" stroke=\"").append(rightColor).append("\" stroke-width=\"3\"/>\n");
+        svg.append("<text x=\"").append(legendX + 30).append("\" y=\"").append(legendY + 4)
+                .append("\" font-size=\"12\" font-family=\"Arial\">")
+                .append(rightSeriesName).append(" (right)").append("</text>\n");
+
+        svg.append("<text x=\"").append(left + plotWidth / 2).append("\" y=\"").append(height - 15)
+                .append("\" text-anchor=\"middle\" font-size=\"13\" font-family=\"Arial\">")
+                .append(xLabel).append("</text>\n");
+        svg.append("<text x=\"18\" y=\"").append(top + plotHeight / 2)
+                .append("\" transform=\"rotate(-90 18 ").append(top + plotHeight / 2)
+                .append(")\" text-anchor=\"middle\" font-size=\"13\" fill=\"").append(leftColor).append("\" font-family=\"Arial\">")
+                .append(leftLabel).append("</text>\n");
+        svg.append("<text x=\"").append(width - 18).append("\" y=\"").append(top + plotHeight / 2)
+                .append("\" transform=\"rotate(90 ").append(width - 18).append(' ').append(top + plotHeight / 2)
+                .append(")\" text-anchor=\"middle\" font-size=\"13\" fill=\"").append(rightColor).append("\" font-family=\"Arial\">")
+                .append(rightLabel).append("</text>\n");
+        svg.append("</svg>\n");
+
+        Path path = Path.of(outputPath);
+        Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(path, svg.toString());
+        System.out.println("[report] chart written: " + path.toAbsolutePath());
     }
 
     static void writeBedsideCharts(String outputCsv, List<WsResult> results) throws Exception {

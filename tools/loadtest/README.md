@@ -176,7 +176,8 @@ GUI 已支持：
 
 - `*-runtime.csv`
 - `*-runtime.md`
-- `*-runtime-resource.svg`
+- `*-runtime-resource.svg`（双轴：左轴 CPU%，右轴 GC pause ms/s）
+- `*-runtime-heap.svg`（heap avg MB）
 
 ## Spring Boot 侧建议开关
 
