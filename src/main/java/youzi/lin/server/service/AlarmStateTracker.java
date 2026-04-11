@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -119,6 +120,34 @@ public class AlarmStateTracker {
         }
 
         return transitions;
+    }
+
+    public BedDebugState debugState(Long bedId) {
+        if (bedId == null) {
+            return null;
+        }
+        var state = bedStates.get(bedId);
+        if (state == null) {
+            return null;
+        }
+        synchronized (state) {
+            var byType = new EnumMap<AlarmType, SingleAlarmDebugState>(AlarmType.class);
+            for (var entry : state.byType.entrySet()) {
+                var single = entry.getValue();
+                byType.put(entry.getKey(), new SingleAlarmDebugState(
+                        single.active,
+                        single.triggerStartedAtMs,
+                        single.resolveStartedAtMs
+                ));
+            }
+            return new BedDebugState(
+                    state.bedId,
+                    state.patientId,
+                    state.connected,
+                    state.lastSeenAtMs,
+                    byType
+            );
+        }
     }
 
     private void evaluateRule(BedAlarmState state,
@@ -240,6 +269,18 @@ public class AlarmStateTracker {
                              AlarmType alarmType,
                              boolean triggered,
                              Instant eventTime) {
+    }
+
+    public record BedDebugState(Long bedId,
+                                Long patientId,
+                                boolean connected,
+                                long lastSeenAtMs,
+                                Map<AlarmType, SingleAlarmDebugState> byType) {
+    }
+
+    public record SingleAlarmDebugState(boolean active,
+                                        long triggerStartedAtMs,
+                                        long resolveStartedAtMs) {
     }
 }
 

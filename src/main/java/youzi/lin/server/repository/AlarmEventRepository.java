@@ -9,5 +9,7 @@ import youzi.lin.server.entity.AlarmEvent;
  */
 @Repository
 public interface AlarmEventRepository extends JpaRepository<AlarmEvent, Long> {
+
+	java.util.List<AlarmEvent> findTop50ByBedIdOrderByTriggerTimeDesc(Long bedId);
 }
 
