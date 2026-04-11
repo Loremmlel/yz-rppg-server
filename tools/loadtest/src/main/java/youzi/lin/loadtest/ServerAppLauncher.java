@@ -1,6 +1,7 @@
 package youzi.lin.loadtest;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -53,8 +54,9 @@ final class ServerAppLauncher implements AutoCloseable {
         int readyTimeoutSec = CliOptions.getInt(options, "serverReadyTimeoutSec", 120);
         String jvmArgs = buildJvmArgs();
 
+        Path mvnwPath = workDir.resolve("mvnw.cmd");
         List<String> command = new ArrayList<>();
-        command.add("mvnw.cmd");
+        command.add(mvnwPath.toString());
         command.add("-DskipTests");
         command.add("spring-boot:run");
         command.add("-Dspring-boot.run.profiles=" + profile);
@@ -67,7 +69,7 @@ final class ServerAppLauncher implements AutoCloseable {
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.directory(workDir.toFile());
-        process = processBuilder.start();
+        process = startProcessWithCmdFallback(processBuilder, command, workDir);
 
         startPipe(process.getInputStream(), "OUT");
         startPipe(process.getErrorStream(), "ERR");
@@ -141,6 +143,28 @@ final class ServerAppLauncher implements AutoCloseable {
         }
         String detail = lastFailure == null ? "timeout" : lastFailure.getMessage();
         throw new IllegalStateException("Server ready check failed: " + endpoint + ", reason=" + detail);
+    }
+
+    private Process startProcessWithCmdFallback(ProcessBuilder directBuilder,
+                                                List<String> originalCommand,
+                                                Path workDir) throws IOException {
+        try {
+            return directBuilder.start();
+        } catch (IOException ex) {
+            String message = ex.getMessage() == null ? "" : ex.getMessage();
+            boolean shouldRetryWithCmd = message.contains("error=2") || message.contains("error=193");
+            if (!shouldRetryWithCmd) {
+                throw ex;
+            }
+            List<String> cmdCommand = new ArrayList<>();
+            cmdCommand.add("cmd.exe");
+            cmdCommand.add("/c");
+            cmdCommand.addAll(originalCommand);
+            log.accept("[server] direct launch failed, retry via cmd.exe /c");
+            return new ProcessBuilder(cmdCommand)
+                    .directory(workDir.toFile())
+                    .start();
+        }
     }
 
     private String buildJvmArgs() {
