@@ -281,10 +281,10 @@ public class PatientVitalsService {
 
     private static VitalsRealtimeDto.@NonNull HrvFreqDomain getHrvFreqDomain(PatientVitals e) {
         var fd = new VitalsRealtimeDto.HrvFreqDomain();
-        fd.setVlf(e.getHrvVlf() * FREQ_TRANS_TO_MS2);
-        fd.setTp(e.getHrvTp() * FREQ_TRANS_TO_MS2);
-        fd.setHf(e.getHrvHf() * FREQ_TRANS_TO_MS2);
-        fd.setLf(e.getHrvLf() * FREQ_TRANS_TO_MS2);
+        fd.setVlf(scaleFreqValue(e.getHrvVlf()));
+        fd.setTp(scaleFreqValue(e.getHrvTp()));
+        fd.setHf(scaleFreqValue(e.getHrvHf()));
+        fd.setLf(scaleFreqValue(e.getHrvLf()));
         fd.setLfHf(e.getHrvLfHf());
         return fd;
     }
@@ -302,13 +302,17 @@ public class PatientVitalsService {
 
         dto.setHrvFreqDomain(new VitalsTrendDto.HrvFreqDomain(
                 row.getLfHfRatio(),
-                row.getHfAvg() * FREQ_TRANS_TO_MS2,
-                row.getLfAvg() * FREQ_TRANS_TO_MS2,
-                row.getVlfAvg() * FREQ_TRANS_TO_MS2,
-                row.getTpAvg() * FREQ_TRANS_TO_MS2
+                scaleFreqValue(row.getHfAvg()),
+                scaleFreqValue(row.getLfAvg()),
+                scaleFreqValue(row.getVlfAvg()),
+                scaleFreqValue(row.getTpAvg())
         ));
 
         return dto;
+    }
+
+    private static Double scaleFreqValue(Double value) {
+        return value == null ? null : value * FREQ_TRANS_TO_MS2;
     }
 }
 
