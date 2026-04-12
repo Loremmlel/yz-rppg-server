@@ -60,7 +60,7 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
         this.sessionManager = sessionManager;
         this.patientVitalsService = patientVitalsService;
         this.bedWardLookupService = bedWardLookupService;
-        scheduler.scheduleAtFixedRate(this::flushBatches, FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        scheduler.scheduleAtFixedRate(this::flushBatchesSafely, FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
     @PreDestroy
@@ -303,6 +303,17 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
                     statsLogger.recordBatchSent();
                 }
             }
+        }
+    }
+
+    /**
+     * 避免定时任务线程因未捕获异常退出，导致后续“只入队不下发”。
+     */
+    private void flushBatchesSafely() {
+        try {
+            flushBatches();
+        } catch (Exception e) {
+            log.error("[NurseWS] 批量下发任务异常，已保护调度线程不中断: {}", e.getMessage(), e);
         }
     }
 

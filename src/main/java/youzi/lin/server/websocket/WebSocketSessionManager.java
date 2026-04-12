@@ -189,7 +189,8 @@ public class WebSocketSessionManager {
             try {
                 session.sendMessage(new TextMessage(text));
                 return true;
-            } catch (IOException e) {
+            } catch (Exception e) {
+                log.debug("[SessionManager] 会话 {} 发送文本消息失败: {}", sessionId, e.getMessage());
                 return false;
             }
         }
