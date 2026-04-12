@@ -236,6 +236,8 @@ final class LoadTestService {
         int warmupSec = CliOptions.getInt(options, "warmupSec", 120);
         int measureSec = CliOptions.getInt(options, "measureSec", 180);
         double writeRatio = CliOptions.getDouble(options, "writeRatio", 0.8d);
+        int bedsPerWorker = Math.max(1, CliOptions.getInt(options, "bedsPerWorker", 10));
+        int writesPerSecPerWorker = Math.max(1, CliOptions.getInt(options, "writesPerSecPerWorker", 10));
         int bedStart = CliOptions.getInt(options, "bedStart", 1);
         int bedEnd = CliOptions.getInt(options, "bedEnd", 64);
         int patientStart = CliOptions.getInt(options, "patientStart", 1);
@@ -255,11 +257,15 @@ final class LoadTestService {
             ExecutorService pool = Executors.newFixedThreadPool(concurrency);
 
             for (int i = 0; i < concurrency; i++) {
+                int workerIndex = i;
                 pool.submit(() -> runDbWorker(
                         jdbcUrl,
                         username,
                         password,
                         writeRatio,
+                        workerIndex,
+                        bedsPerWorker,
+                        writesPerSecPerWorker,
                         bedStart,
                         bedEnd,
                         patientStart,
@@ -402,6 +408,9 @@ final class LoadTestService {
                                     String username,
                                     String password,
                                     double writeRatio,
+                                    int workerIndex,
+                                    int bedsPerWorker,
+                                    int writesPerSecPerWorker,
                                     int bedStart,
                                     int bedEnd,
                                     int patientStart,
@@ -410,10 +419,44 @@ final class LoadTestService {
                                     AtomicBoolean running,
                                     AtomicBoolean measuring,
                                     DbMetrics metrics) {
-        String insertSql = "INSERT INTO patient_vitals(\"time\", bed_id, patient_id, hr, sqi, latency, hrv_sdnn, hrv_rmssd) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?)";
-        String querySql = "SELECT time_bucket('1 minute', \"time\") AS bucket, AVG(hr), percentile_cont(0.5) WITHIN GROUP (ORDER BY hrv_sdnn) "
-                + "FROM patient_vitals WHERE bed_id = ? AND patient_id = ? AND \"time\" > NOW() - INTERVAL '30 minutes' "
-                + "GROUP BY bucket ORDER BY bucket DESC LIMIT 60";
+        String insertSql = """
+                INSERT INTO patient_vitals(
+                    "time", bed_id, patient_id, hr, sqi, latency,
+                    hrv_sdnn, hrv_rmssd, hrv_sdsd, hrv_pnn50, hrv_pnn20,
+                    hrv_breathingrate, hrv_lf_hf, hrv_hf, hrv_lf, hrv_vlf, hrv_tp
+                ) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String querySql = """
+                SELECT
+                    time_bucket('1 minute', pv."time") AS bucket_time,
+                    AVG(pv.hr)                                          AS hr_avg,
+                    AVG(pv.hrv_breathingrate)                           AS br_avg,
+                    AVG(pv.sqi)                                         AS sqi_avg,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_sdnn)  AS sdnn_median,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_rmssd) AS rmssd_median,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_sdsd)  AS sdsd_median,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_pnn50) AS pnn50_median,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY pv.hrv_pnn20) AS pnn20_median,
+                    AVG(pv.hrv_lf_hf)                                   AS lf_hf_ratio,
+                    AVG(pv.hrv_hf)                                      AS hf_avg,
+                    AVG(pv.hrv_lf)                                      AS lf_avg,
+                    AVG(pv.hrv_vlf)                                     AS vlf_avg,
+                    AVG(pv.hrv_tp)                                      AS tp_avg
+                FROM patient_vitals pv
+                WHERE pv.bed_id = ?
+                  AND pv.patient_id = ?
+                  AND pv."time" BETWEEN NOW() - INTERVAL '30 minutes' AND NOW()
+                GROUP BY bucket_time
+                ORDER BY bucket_time ASC
+                """;
+
+        List<Long> workerBeds = assignWorkerBeds(workerIndex, bedsPerWorker, bedStart, bedEnd);
+        double readsPerSecond = calculateReadsPerSecond(writeRatio, writesPerSecPerWorker);
+        long tickIntervalNs = TimeUnit.SECONDS.toNanos(1);
+        long nextTickNs = System.nanoTime();
+        int writeCursor = 0;
+        int readCursor = 0;
+        double readCarry = 0.0;
 
         try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
              PreparedStatement insert = conn.prepareStatement(insertSql);
@@ -422,18 +465,29 @@ final class LoadTestService {
             conn.setAutoCommit(true);
 
             while (running.get()) {
-                boolean doWrite = ThreadLocalRandom.current().nextDouble() < writeRatio;
-                long startNs = System.nanoTime();
+                for (int i = 0; i < writesPerSecPerWorker && running.get(); i++) {
+                    long bedId = workerBeds.get(writeCursor % workerBeds.size());
+                    long patientId = mapBedToPatient(bedId, patientStart, patientEnd);
+                    writeCursor++;
 
-                if (doWrite) {
+                    long startNs = System.nanoTime();
                     try {
-                        insert.setLong(1, randomBetween(bedStart, bedEnd));
-                        insert.setLong(2, randomBetween(patientStart, patientEnd));
+                        insert.setLong(1, bedId);
+                        insert.setLong(2, patientId);
                         insert.setDouble(3, ThreadLocalRandom.current().nextDouble(55.0, 120.0));
-                        insert.setDouble(4, ThreadLocalRandom.current().nextDouble(0.3, 1.0));
+                        insert.setDouble(4, ThreadLocalRandom.current().nextDouble(0.5, 1.0));
                         insert.setDouble(5, markerLatency);
-                        insert.setDouble(6, ThreadLocalRandom.current().nextDouble(15.0, 90.0));
-                        insert.setDouble(7, ThreadLocalRandom.current().nextDouble(8.0, 70.0));
+                        insert.setDouble(6, ThreadLocalRandom.current().nextDouble(20.0, 90.0));
+                        insert.setDouble(7, ThreadLocalRandom.current().nextDouble(15.0, 70.0));
+                        insert.setDouble(8, ThreadLocalRandom.current().nextDouble(10.0, 65.0));
+                        insert.setDouble(9, ThreadLocalRandom.current().nextDouble(0.05, 0.45));
+                        insert.setDouble(10, ThreadLocalRandom.current().nextDouble(0.02, 0.30));
+                        insert.setDouble(11, ThreadLocalRandom.current().nextDouble(10.0, 22.0));
+                        insert.setDouble(12, ThreadLocalRandom.current().nextDouble(0.7, 2.2));
+                        insert.setDouble(13, ThreadLocalRandom.current().nextDouble(20.0, 300.0));
+                        insert.setDouble(14, ThreadLocalRandom.current().nextDouble(30.0, 350.0));
+                        insert.setDouble(15, ThreadLocalRandom.current().nextDouble(10.0, 180.0));
+                        insert.setDouble(16, ThreadLocalRandom.current().nextDouble(80.0, 700.0));
                         insert.executeUpdate();
                         if (measuring.get()) {
                             metrics.writeOps.increment();
@@ -444,10 +498,21 @@ final class LoadTestService {
                             metrics.writeErrors.increment();
                         }
                     }
-                } else {
+                }
+
+                readCarry += readsPerSecond;
+                int readsThisTick = (int) readCarry;
+                readCarry -= readsThisTick;
+
+                for (int i = 0; i < readsThisTick && running.get(); i++) {
+                    long bedId = workerBeds.get(readCursor % workerBeds.size());
+                    long patientId = mapBedToPatient(bedId, patientStart, patientEnd);
+                    readCursor++;
+
+                    long startNs = System.nanoTime();
                     try {
-                        query.setLong(1, randomBetween(bedStart, bedEnd));
-                        query.setLong(2, randomBetween(patientStart, patientEnd));
+                        query.setLong(1, bedId);
+                        query.setLong(2, patientId);
                         try (ResultSet rs = query.executeQuery()) {
                             while (rs.next()) {
                                 rs.getObject(1);
@@ -462,6 +527,19 @@ final class LoadTestService {
                             metrics.readErrors.increment();
                         }
                     }
+                }
+
+                nextTickNs += tickIntervalNs;
+                long sleepNs = nextTickNs - System.nanoTime();
+                if (sleepNs > 0) {
+                    try {
+                        TimeUnit.NANOSECONDS.sleep(sleepNs);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else {
+                    nextTickNs = System.nanoTime();
                 }
             }
         } catch (Exception e) {
@@ -528,6 +606,38 @@ final class LoadTestService {
         int min = Math.min(start, end);
         int max = Math.max(start, end);
         return ThreadLocalRandom.current().nextLong(min, (long) max + 1);
+    }
+
+    private static List<Long> assignWorkerBeds(int workerIndex, int bedsPerWorker, int bedStart, int bedEnd) {
+        int min = Math.min(bedStart, bedEnd);
+        int max = Math.max(bedStart, bedEnd);
+        int totalBeds = Math.max(1, max - min + 1);
+        long offsetBase = (long) workerIndex * bedsPerWorker;
+
+        List<Long> beds = new ArrayList<>(bedsPerWorker);
+        for (int i = 0; i < bedsPerWorker; i++) {
+            int offset = (int) ((offsetBase + i) % totalBeds);
+            beds.add((long) min + offset);
+        }
+        return beds;
+    }
+
+    private static long mapBedToPatient(long bedId, int patientStart, int patientEnd) {
+        int min = Math.min(patientStart, patientEnd);
+        int max = Math.max(patientStart, patientEnd);
+        int totalPatients = Math.max(1, max - min + 1);
+        long offset = Math.floorMod(bedId - min, totalPatients);
+        return min + offset;
+    }
+
+    private static double calculateReadsPerSecond(double writeRatio, int writesPerSecPerWorker) {
+        if (writeRatio >= 1.0d) {
+            return 0.0d;
+        }
+        if (writeRatio <= 0.0d) {
+            return writesPerSecPerWorker;
+        }
+        return writesPerSecPerWorker * (1.0d - writeRatio) / writeRatio;
     }
 
     private static List<Integer> resolveLevels(Map<String, String> options, String key, List<Integer> fallback) {

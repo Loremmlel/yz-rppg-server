@@ -118,6 +118,13 @@ $env:JAVA_TOOL_OPTIONS = "-Xms4g -Xmx4g -XX:+UseZGC -XX:+AlwaysPreTouch"
 
 ### 3) DB 混合负载
 
+`db` 场景当前负载模型（默认）：
+
+- 每个 worker 固定绑定 `10` 个床位（`--bedsPerWorker 10`）
+- 每个 worker 固定每秒写入 `10` 条 vitals（`--writesPerSecPerWorker 10`）
+- 查询频率按 `--writeRatio` 折算（例如 `0.8` 时，约每秒 `2.5` 次聚合查询）
+- 读 SQL 使用与业务趋势查询一致的 `time_bucket + percentile_cont` 聚合风格
+
 ```powershell
 ..\..\mvnw.cmd -f pom.xml exec:java -Dexec.args="db --jdbcUrl jdbc:postgresql://localhost:5432/rppg --username postgres --password 1234 --concurrencyLevels 16,32,64,128,256 --writeRatio 0.8 --warmupSec 120 --measureSec 180 --outputCsv .\results\db-latency.csv --outputMd .\results\db-latency.md"
 ```
