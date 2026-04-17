@@ -11,7 +11,15 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 报警内存状态追踪器：负责持续时间防抖与触发/恢复判定。
+ * 报警内存状态追踪器。
+ * <p>
+ * 基于床位维度维护报警状态机，负责：
+ * <ul>
+ *     <li>触发/恢复持续时间防抖</li>
+ *     <li>在线/离线状态切换</li>
+ *     <li>输出报警边沿变化（触发或恢复）</li>
+ * </ul>
+ * </p>
  */
 @Component
 public class AlarmStateTracker {
@@ -27,6 +35,9 @@ public class AlarmStateTracker {
 
     private final ConcurrentHashMap<Long, BedAlarmState> bedStates = new ConcurrentHashMap<>();
 
+    /**
+     * 会话建立时标记在线并刷新最后活动时间。
+     */
     public void onSessionConnected(Long bedId, Long patientId, Instant now) {
         if (bedId == null) {
             return;
@@ -39,6 +50,9 @@ public class AlarmStateTracker {
         }
     }
 
+    /**
+     * 会话断开时强制恢复生命体征类报警，并触发离线报警。
+     */
     public List<Transition> onSessionDisconnected(Long bedId, Long patientId, Instant now) {
         if (bedId == null) {
             return List.of();
@@ -54,6 +68,9 @@ public class AlarmStateTracker {
         }
     }
 
+    /**
+     * 根据最新生命体征输入推进状态机。
+     */
     public List<Transition> evaluateVitals(Long bedId,
                                            Long patientId,
                                            Double hr,
@@ -101,6 +118,9 @@ public class AlarmStateTracker {
         }
     }
 
+    /**
+     * 定时离线巡检：超过离线超时阈值的床位将触发离线边沿。
+     */
     public List<Transition> checkTimeout(Instant now) {
         long nowMs = now.toEpochMilli();
         var transitions = new ArrayList<Transition>();
@@ -122,6 +142,9 @@ public class AlarmStateTracker {
         return transitions;
     }
 
+    /**
+     * 调试接口：返回床位当前状态机内部状态快照。
+     */
     public BedDebugState debugState(Long bedId) {
         if (bedId == null) {
             return null;
@@ -150,16 +173,19 @@ public class AlarmStateTracker {
         }
     }
 
+    /**
+     * 通用防抖判定：在“触发态”和“激活态”之间切换。
+     */
     private void evaluateRule(BedAlarmState state,
-                              AlarmType type,
+                              AlarmType alarmType,
                               boolean triggerCondition,
                               boolean resolveCondition,
                               long triggerDurationMs,
                               long resolveDurationMs,
                               long nowMs,
                               Instant now,
-                              List<Transition> out) {
-        var alarmState = state.byType.get(type);
+                              List<Transition> transitions) {
+        var alarmState = state.byType.get(alarmType);
 
         if (!alarmState.active) {
             if (triggerCondition) {
@@ -170,7 +196,7 @@ public class AlarmStateTracker {
                     alarmState.active = true;
                     alarmState.triggerStartedAtMs = 0L;
                     alarmState.resolveStartedAtMs = 0L;
-                    out.add(new Transition(state.bedId, state.patientId, type, true, now));
+                    transitions.add(new Transition(state.bedId, state.patientId, alarmType, true, now));
                 }
             } else {
                 alarmState.triggerStartedAtMs = 0L;
@@ -186,36 +212,36 @@ public class AlarmStateTracker {
                 alarmState.active = false;
                 alarmState.resolveStartedAtMs = 0L;
                 alarmState.triggerStartedAtMs = 0L;
-                out.add(new Transition(state.bedId, state.patientId, type, false, now));
+                transitions.add(new Transition(state.bedId, state.patientId, alarmType, false, now));
             }
         } else {
             alarmState.resolveStartedAtMs = 0L;
         }
     }
 
-    private void forceResolveVitalsAlarms(BedAlarmState state, Instant now, List<Transition> out) {
-        resolveTypeIfActive(state, AlarmType.TACHYCARDIA, now, out);
-        resolveTypeIfActive(state, AlarmType.BRADYCARDIA, now, out);
-        resolveTypeIfActive(state, AlarmType.LOW_SQI, now, out);
+    private void forceResolveVitalsAlarms(BedAlarmState state, Instant now, List<Transition> transitions) {
+        resolveTypeIfActive(state, AlarmType.TACHYCARDIA, now, transitions);
+        resolveTypeIfActive(state, AlarmType.BRADYCARDIA, now, transitions);
+        resolveTypeIfActive(state, AlarmType.LOW_SQI, now, transitions);
     }
 
     private void resolveTypeIfActive(BedAlarmState state,
-                                     AlarmType type,
+                                     AlarmType alarmType,
                                      Instant now,
-                                     List<Transition> out) {
-        var alarmState = state.byType.get(type);
+                                     List<Transition> transitions) {
+        var alarmState = state.byType.get(alarmType);
         if (!alarmState.active) {
             return;
         }
         alarmState.active = false;
         alarmState.triggerStartedAtMs = 0L;
         alarmState.resolveStartedAtMs = 0L;
-        out.add(new Transition(state.bedId, state.patientId, type, false, now));
+        transitions.add(new Transition(state.bedId, state.patientId, alarmType, false, now));
     }
 
     private void triggerOfflineIfInactive(BedAlarmState state,
                                           Instant now,
-                                          List<Transition> out) {
+                                          List<Transition> transitions) {
         var alarmState = state.byType.get(AlarmType.DEVICE_OFFLINE);
         if (alarmState.active) {
             return;
@@ -223,12 +249,12 @@ public class AlarmStateTracker {
         alarmState.active = true;
         alarmState.triggerStartedAtMs = 0L;
         alarmState.resolveStartedAtMs = 0L;
-        out.add(new Transition(state.bedId, state.patientId, AlarmType.DEVICE_OFFLINE, true, now));
+        transitions.add(new Transition(state.bedId, state.patientId, AlarmType.DEVICE_OFFLINE, true, now));
     }
 
     private void resolveOfflineIfActive(BedAlarmState state,
                                         Instant now,
-                                        List<Transition> out) {
+                                        List<Transition> transitions) {
         var alarmState = state.byType.get(AlarmType.DEVICE_OFFLINE);
         if (!alarmState.active) {
             return;
@@ -236,7 +262,7 @@ public class AlarmStateTracker {
         alarmState.active = false;
         alarmState.triggerStartedAtMs = 0L;
         alarmState.resolveStartedAtMs = 0L;
-        out.add(new Transition(state.bedId, state.patientId, AlarmType.DEVICE_OFFLINE, false, now));
+        transitions.add(new Transition(state.bedId, state.patientId, AlarmType.DEVICE_OFFLINE, false, now));
     }
 
     private boolean isOfflineActive(BedAlarmState state) {

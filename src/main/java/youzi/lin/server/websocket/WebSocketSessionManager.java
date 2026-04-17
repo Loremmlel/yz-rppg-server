@@ -32,7 +32,7 @@ public class WebSocketSessionManager {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketSessionManager.class);
 
-    private final ConcurrentHashMap<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, WebSocketSession> activeSessions = new ConcurrentHashMap<>();
 
     /** sessionId → bedId */
     private final ConcurrentHashMap<String, Long> sessionBedMap = new ConcurrentHashMap<>();
@@ -44,7 +44,7 @@ public class WebSocketSessionManager {
     private final ConcurrentHashMap<String, Long> sessionPatientMap = new ConcurrentHashMap<>();
 
     /** sessionId → 最近一次收到客户端消息的时间戳（毫秒） */
-    private final ConcurrentHashMap<String, Long> sessionLastClientMessageAt = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> sessionLastClientMessageAtMs = new ConcurrentHashMap<>();
 
     /** sessionId → 连续心跳未响应次数 */
     private final ConcurrentHashMap<String, AtomicInteger> sessionMissedPingCount = new ConcurrentHashMap<>();
@@ -57,7 +57,7 @@ public class WebSocketSessionManager {
      * @param patientId 当前床位的在院患者 ID，可能为 {@code null}（床位空置或查询失败时）
      */
     public void register(WebSocketSession session, Long bedId, Long patientId) {
-        sessions.put(session.getId(), session);
+        activeSessions.put(session.getId(), session);
         markClientActivity(session.getId());
 
         if (bedId != null) {
@@ -66,7 +66,7 @@ public class WebSocketSessionManager {
             if (oldSessionId != null && !oldSessionId.equals(session.getId())) {
                 sessionBedMap.remove(oldSessionId);
                 sessionPatientMap.remove(oldSessionId);
-                sessionLastClientMessageAt.remove(oldSessionId);
+                sessionLastClientMessageAtMs.remove(oldSessionId);
                 sessionMissedPingCount.remove(oldSessionId);
                 log.info("[SessionManager] 床位 {} 的旧会话 {} 已被新会话 {} 替代",
                         bedId, oldSessionId, session.getId());
@@ -82,14 +82,10 @@ public class WebSocketSessionManager {
 
     /**
      * 注销会话并清理所有相关映射（sessionId ↔ bedId ↔ patientId）。
-     * <p>
-     * {@code @SuppressWarnings("resource")} 是因为 ConcurrentHashMap 实现了 Closeable，
-     * 但此处仅调用 remove 方法，无需关闭，编译器警告属于误报。
-     * </p>
      */
     @SuppressWarnings("resource")
     public void remove(String sessionId) {
-        sessions.remove(sessionId);
+        activeSessions.remove(sessionId);
 
         Long bedId = sessionBedMap.remove(sessionId);
         if (bedId != null) {
@@ -97,7 +93,7 @@ public class WebSocketSessionManager {
         }
 
         sessionPatientMap.remove(sessionId);
-        sessionLastClientMessageAt.remove(sessionId);
+        sessionLastClientMessageAtMs.remove(sessionId);
         sessionMissedPingCount.remove(sessionId);
     }
 
@@ -105,7 +101,7 @@ public class WebSocketSessionManager {
      * 标记会话收到客户端消息，刷新最近活跃时间并重置未响应计数。
      */
     public void markClientActivity(String sessionId) {
-        sessionLastClientMessageAt.put(sessionId, Instant.now().toEpochMilli());
+        sessionLastClientMessageAtMs.put(sessionId, Instant.now().toEpochMilli());
         sessionMissedPingCount.putIfAbsent(sessionId, new AtomicInteger(0));
         var counter = sessionMissedPingCount.get(sessionId);
         if (counter != null) {
@@ -117,7 +113,7 @@ public class WebSocketSessionManager {
      * 获取会话最近一次客户端消息时间戳（毫秒）。
      */
     public Long getLastClientMessageAt(String sessionId) {
-        return sessionLastClientMessageAt.get(sessionId);
+        return sessionLastClientMessageAtMs.get(sessionId);
     }
 
     /**
@@ -133,7 +129,7 @@ public class WebSocketSessionManager {
      * 按 sessionId 获取会话，不存在时返回 {@code null}。
      */
     public WebSocketSession get(String sessionId) {
-        return sessions.get(sessionId);
+        return activeSessions.get(sessionId);
     }
 
     /**
@@ -142,7 +138,7 @@ public class WebSocketSessionManager {
     @SuppressWarnings("unused")
     public WebSocketSession getByBedId(Long bedId) {
         String sessionId = bedSessionMap.get(bedId);
-        return sessionId != null ? sessions.get(sessionId) : null;
+        return sessionId != null ? activeSessions.get(sessionId) : null;
     }
 
     /**
@@ -165,7 +161,7 @@ public class WebSocketSessionManager {
      * 返回所有当前活跃会话的集合（非快照，由心跳任务遍历使用）。
      */
     public Collection<WebSocketSession> allSessions() {
-        return sessions.values();
+        return activeSessions.values();
     }
 
     /**
@@ -181,7 +177,7 @@ public class WebSocketSessionManager {
      * 对同一 session 的 sendMessage 加锁，避免并发写入导致异常。
      */
     public boolean sendTextMessage(String sessionId, String text) {
-        var session = sessions.get(sessionId);
+        var session = activeSessions.get(sessionId);
         if (session == null || !session.isOpen()) {
             return false;
         }
@@ -202,7 +198,7 @@ public class WebSocketSessionManager {
      */
     @SuppressWarnings("unused")
     public boolean sendBinaryMessage(String sessionId, byte[] data) {
-        var session = sessions.get(sessionId);
+        var session = activeSessions.get(sessionId);
         if (session == null || !session.isOpen()) {
             return false;
         }
@@ -221,7 +217,7 @@ public class WebSocketSessionManager {
      * 对同一 session 的 sendMessage 加锁，避免并发写入导致异常。
      */
     public boolean sendPingMessage(String sessionId) {
-        var session = sessions.get(sessionId);
+        var session = activeSessions.get(sessionId);
         if (session == null || !session.isOpen()) {
             return false;
         }

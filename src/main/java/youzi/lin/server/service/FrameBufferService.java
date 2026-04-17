@@ -34,7 +34,7 @@ public class FrameBufferService {
     private static final int BATCH_SIZE = 30;
     private static final int TIMESTAMP_BYTES = Long.BYTES; // 8
 
-    private final ConcurrentHashMap<String, List<VideoFrameData>> buffers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<VideoFrameData>> sessionBuffers = new ConcurrentHashMap<>();
     private final GrpcFrameAnalysisClient grpcClient;
 
     /** 聚合统计日志记录器，与帧处理逻辑解耦 */
@@ -51,28 +51,28 @@ public class FrameBufferService {
      * </p>
      *
      * @param sessionId WebSocket 会话 ID
-     * @param payload   原始二进制数据：[8 字节大端时间戳] + [编码图像数据]
+     * @param framePayload 原始二进制数据：[8 字节大端时间戳] + [编码图像数据]
      */
-    public void addFrame(String sessionId, byte[] payload) {
-        if (payload.length <= TIMESTAMP_BYTES) {
+    public void addFrame(String sessionId, byte[] framePayload) {
+        if (framePayload.length <= TIMESTAMP_BYTES) {
             statsLogger.recordInvalidFrame();
-            log.warn("[FrameBuffer] 会话 {} 收到无效帧（长度 {}），已丢弃", sessionId, payload.length);
+            log.warn("[FrameBuffer] 会话 {} 收到无效帧（长度 {}），已丢弃", sessionId, framePayload.length);
             return;
         }
 
         // 解析时间戳（大端 int64）
-        var timestampMs = ByteBuffer.wrap(payload, 0, TIMESTAMP_BYTES)
+        var timestampMs = ByteBuffer.wrap(framePayload, 0, TIMESTAMP_BYTES)
                 .order(ByteOrder.BIG_ENDIAN)
                 .getLong();
 
         // 提取图像数据（JPEG / WebP 等，透传不解码）
-        var imageData = new byte[payload.length - TIMESTAMP_BYTES];
-        System.arraycopy(payload, TIMESTAMP_BYTES, imageData, 0, imageData.length);
+        var imageData = new byte[framePayload.length - TIMESTAMP_BYTES];
+        System.arraycopy(framePayload, TIMESTAMP_BYTES, imageData, 0, imageData.length);
 
         var frame = new VideoFrameData(timestampMs, imageData);
 
         // 使用 computeIfAbsent 保证 per-session list 的创建是原子的
-        var sessionBuffer = buffers.computeIfAbsent(sessionId, _ -> new ArrayList<>(BATCH_SIZE));
+        var sessionBuffer = sessionBuffers.computeIfAbsent(sessionId, _ -> new ArrayList<>(BATCH_SIZE));
 
         List<VideoFrameData> batch = null;
         synchronized (sessionBuffer) {
@@ -98,7 +98,7 @@ public class FrameBufferService {
      * </p>
      */
     public void removeSession(String sessionId) {
-        var removed = buffers.remove(sessionId);
+        var removed = sessionBuffers.remove(sessionId);
         if (removed != null && !removed.isEmpty()) {
             statsLogger.recordFramesDiscarded(removed.size());
             log.info("[FrameBuffer] 会话 {} 断开，丢弃 {} 帧未满批次", sessionId, removed.size());

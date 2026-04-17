@@ -21,7 +21,15 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 护士站病区广播服务：维护订阅关系、快照与增量推送。
+ * 护士站病区广播服务。
+ * <p>
+ * 负责维护订阅关系，并向护士站会话发送三类数据：
+ * <ul>
+ *     <li>订阅后的快照 {@code snapshot}</li>
+ *     <li>300ms 微批增量 {@code vitals.batch_update}</li>
+ *     <li>报警边沿事件 {@code alarm.trigger}/{@code alarm.resolve}</li>
+ * </ul>
+ * </p>
  */
 @Service
 public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
@@ -47,7 +55,7 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
     /** wardCode -> 单调版本号（用于前端增量对齐） */
     private final ConcurrentHashMap<String, AtomicLong> wardVersions = new ConcurrentHashMap<>();
 
-    private final AtomicLong seq = new AtomicLong();
+    private final AtomicLong updateSequence = new AtomicLong();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         var t = new Thread(r, "nurse-ward-batch-flusher");
         t.setDaemon(true);
@@ -125,43 +133,43 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
         }
 
         var pending = pendingByWard.computeIfAbsent(wardCode, _ -> new ConcurrentHashMap<>());
-        pending.put(patientId, new PendingUpdate(patientId, bedId, hr, sqi, eventTime, seq.incrementAndGet()));
+        pending.put(patientId, new PendingUpdate(patientId, bedId, hr, sqi, eventTime, updateSequence.incrementAndGet()));
         statsLogger.recordUpdateQueued();
     }
 
     public void sendSnapshot(String sessionId, String wardCode) {
         var snapshot = patientVitalsService.getWardLatestVitalsSnapshot(wardCode);
-        ObjectNode msg = objectMapper.createObjectNode();
-        msg.put("type", "snapshot");
-        msg.put("wardCode", wardCode);
-        msg.put("version", wardVersions.computeIfAbsent(wardCode, _ -> new AtomicLong()).get());
-        msg.put("generatedAt", Instant.now().toString());
+        ObjectNode snapshotMessage = objectMapper.createObjectNode();
+        snapshotMessage.put("type", "snapshot");
+        snapshotMessage.put("wardCode", wardCode);
+        snapshotMessage.put("version", wardVersions.computeIfAbsent(wardCode, _ -> new AtomicLong()).get());
+        snapshotMessage.put("generatedAt", Instant.now().toString());
 
-        ArrayNode patients = msg.putArray("patients");
-        for (var item : snapshot) {
-            ObjectNode p = patients.addObject();
-            p.put("patientId", item.patientId());
-            p.put("bedId", item.bedId());
-            p.put("roomNo", item.roomNo());
-            p.put("bedNo", item.bedNo());
-            if (item.hr() != null) {
-                p.put("hr", item.hr());
+        ArrayNode patientNodes = snapshotMessage.putArray("patients");
+        for (var patient : snapshot) {
+            ObjectNode patientNode = patientNodes.addObject();
+            patientNode.put("patientId", patient.patientId());
+            patientNode.put("bedId", patient.bedId());
+            patientNode.put("roomNo", patient.roomNo());
+            patientNode.put("bedNo", patient.bedNo());
+            if (patient.hr() != null) {
+                patientNode.put("hr", patient.hr());
             } else {
-                p.putNull("hr");
+                patientNode.putNull("hr");
             }
-            if (item.sqi() != null) {
-                p.put("sqi", item.sqi());
+            if (patient.sqi() != null) {
+                patientNode.put("sqi", patient.sqi());
             } else {
-                p.putNull("sqi");
+                patientNode.putNull("sqi");
             }
-            if (item.eventTime() != null) {
-                p.put("eventTime", item.eventTime().toString());
+            if (patient.eventTime() != null) {
+                patientNode.put("eventTime", patient.eventTime().toString());
             } else {
-                p.putNull("eventTime");
+                patientNode.putNull("eventTime");
             }
         }
 
-        if (sendJson(sessionId, msg)) {
+        if (sendJson(sessionId, snapshotMessage)) {
             statsLogger.recordSnapshotSent();
         }
     }
@@ -188,28 +196,28 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
             return;
         }
 
-        ObjectNode msg = objectMapper.createObjectNode();
-        msg.put("type", status == AlarmStatus.ACTIVE ? "alarm.trigger" : "alarm.resolve");
-        msg.put("wardCode", wardCode);
-        msg.put("bedId", bedId);
+        ObjectNode alarmMessage = objectMapper.createObjectNode();
+        alarmMessage.put("type", status == AlarmStatus.ACTIVE ? "alarm.trigger" : "alarm.resolve");
+        alarmMessage.put("wardCode", wardCode);
+        alarmMessage.put("bedId", bedId);
         if (patientId != null) {
-            msg.put("patientId", patientId);
+            alarmMessage.put("patientId", patientId);
         } else {
-            msg.putNull("patientId");
+            alarmMessage.putNull("patientId");
         }
-        msg.put("alarmType", alarmType.name());
-        msg.put("status", status.name());
-        msg.put("message", message != null ? message : "");
-        msg.put("timestamp", (eventTime != null ? eventTime : Instant.now()).toString());
+        alarmMessage.put("alarmType", alarmType.name());
+        alarmMessage.put("status", status.name());
+        alarmMessage.put("message", message != null ? message : "");
+        alarmMessage.put("timestamp", (eventTime != null ? eventTime : Instant.now()).toString());
         if (alarmEventId != null) {
-            msg.put("alarmEventId", alarmEventId);
+            alarmMessage.put("alarmEventId", alarmEventId);
         } else {
-            msg.putNull("alarmEventId");
+            alarmMessage.putNull("alarmEventId");
         }
 
-        String text;
+        String serializedMessage;
         try {
-            text = objectMapper.writeValueAsString(msg);
+            serializedMessage = objectMapper.writeValueAsString(alarmMessage);
         } catch (Exception e) {
             statsLogger.recordSerializationError();
             log.error("[NurseWS] 序列化报警消息失败 bedId={}, type={}, err={}",
@@ -219,7 +227,7 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
 
         statsLogger.recordAlarmPrepared(status == AlarmStatus.ACTIVE);
         for (var sessionId : sessions) {
-            boolean sent = sessionManager.sendTextMessage(sessionId, text);
+            boolean sent = sessionManager.sendTextMessage(sessionId, serializedMessage);
             if (!sent) {
                 statsLogger.recordSendFailure();
                 log.debug("[NurseWS] 会话 {} 不可写，移除订阅", sessionId);
@@ -230,6 +238,9 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
         }
     }
 
+    /**
+     * 将各病区待发送更新按序号排序后进行微批下发。
+     */
     private void flushBatches() {
         for (var entry : pendingByWard.entrySet()) {
             var wardCode = entry.getKey();
@@ -254,38 +265,38 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
             long toVersion = versionCounter.addAndGet(updates.size());
             long fromVersion = toVersion - updates.size() + 1;
 
-            ObjectNode msg = objectMapper.createObjectNode();
-            msg.put("type", "vitals.batch_update");
-            msg.put("wardCode", wardCode);
-            msg.put("fromVersion", fromVersion);
-            msg.put("toVersion", toVersion);
+            ObjectNode batchMessage = objectMapper.createObjectNode();
+            batchMessage.put("type", "vitals.batch_update");
+            batchMessage.put("wardCode", wardCode);
+            batchMessage.put("fromVersion", fromVersion);
+            batchMessage.put("toVersion", toVersion);
 
-            ArrayNode arr = msg.putArray("updates");
+            ArrayNode updateNodes = batchMessage.putArray("updates");
             for (var update : updates) {
-                ObjectNode item = arr.addObject();
-                item.put("patientId", update.patientId());
-                item.put("bedId", update.bedId());
+                ObjectNode updateNode = updateNodes.addObject();
+                updateNode.put("patientId", update.patientId());
+                updateNode.put("bedId", update.bedId());
                 if (update.hr() != null) {
-                    item.put("hr", update.hr());
+                    updateNode.put("hr", update.hr());
                 } else {
-                    item.putNull("hr");
+                    updateNode.putNull("hr");
                 }
                 if (update.sqi() != null) {
-                    item.put("sqi", update.sqi());
+                    updateNode.put("sqi", update.sqi());
                 } else {
-                    item.putNull("sqi");
+                    updateNode.putNull("sqi");
                 }
                 if (update.eventTime() != null) {
-                    item.put("eventTime", update.eventTime().toString());
+                    updateNode.put("eventTime", update.eventTime().toString());
                 } else {
-                    item.putNull("eventTime");
+                    updateNode.putNull("eventTime");
                 }
-                item.put("seq", update.seq());
+                updateNode.put("seq", update.seq());
             }
 
-            String text;
+            String serializedMessage;
             try {
-                text = objectMapper.writeValueAsString(msg);
+                serializedMessage = objectMapper.writeValueAsString(batchMessage);
             } catch (Exception e) {
                 statsLogger.recordSerializationError();
                 log.error("[NurseWS] 序列化病区 {} 增量更新失败: {}", wardCode, e.getMessage(), e);
@@ -294,7 +305,7 @@ public class NurseWardBroadcastService implements NurseWardAlarmPublisher {
 
             statsLogger.recordBatchPrepared(updates.size());
             for (var sessionId : sessions) {
-                boolean sent = sessionManager.sendTextMessage(sessionId, text);
+                boolean sent = sessionManager.sendTextMessage(sessionId, serializedMessage);
                 if (!sent) {
                     statsLogger.recordSendFailure();
                     log.debug("[NurseWS] 会话 {} 不可写，移除订阅", sessionId);
