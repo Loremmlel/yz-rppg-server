@@ -82,7 +82,12 @@ public class WebSocketHeartbeat {
     }
 
     /**
-     * 清理会话关联状态：报警、护士站订阅关系和会话映射。
+     * 清理会话关联状态。
+     * <p>
+     * 该方法只负责“连接断开后的联动收尾”：
+     * 报警服务负责状态机边沿处理，广播服务负责订阅关系回收，
+     * 会话管理器负责最终会话映射删除。
+     * </p>
      */
     private void cleanupSession(WebSocketSession session) {
         Long bedId = sessionManager.getBedId(session.getId());

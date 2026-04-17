@@ -74,7 +74,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
         var sessionId = session.getId();
         var bedId = sessionManager.getBedId(sessionId);
         var patientId = sessionManager.getPatientId(sessionId);
-        // 先刷盘剩余分析结果，再清理会话状态
+        // 先刷盘 gRPC 侧残留结果，再清理本地会话映射，避免断连时漏写。
         grpcClient.flushAndRemoveSession(sessionId);
         alarmService.onSessionDisconnected(bedId, patientId);
         sessionManager.remove(sessionId);
@@ -111,9 +111,9 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
             return null;
         }
         try {
-            var value = UriComponentsBuilder.fromUri(uri).build()
+            var bedIdParam = UriComponentsBuilder.fromUri(uri).build()
                     .getQueryParams().getFirst("bedId");
-            return value != null ? Long.valueOf(value) : null;
+            return bedIdParam != null ? Long.valueOf(bedIdParam) : null;
         } catch (NumberFormatException e) {
             log.warn("[WebSocket] 会话 {} 的 bedId 参数非法：{}", session.getId(), uri.getQuery());
             return null;

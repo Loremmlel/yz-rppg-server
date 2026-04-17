@@ -31,7 +31,7 @@ public class AlarmService {
     private final AlarmEventRepository alarmEventRepository;
     private final NurseWardAlarmPublisher nurseWardAlarmPublisher;
 
-    /** bedId -> (alarmType -> active alarmEventId) */
+    /** bedId -> (alarmType -> 当前 ACTIVE 报警事件 ID) */
     private final ConcurrentHashMap<Long, EnumMap<AlarmType, Long>> activeEventIds = new ConcurrentHashMap<>();
 
     private final StatsLogger statsLogger = new StatsLogger();
@@ -115,7 +115,7 @@ public class AlarmService {
                     transition.patientId(),
                     transition.alarmType(),
                     AlarmStatus.ACTIVE,
-                    alarmMessage(transition.alarmType()),
+                    buildTriggerMessage(transition.alarmType()),
                     transition.eventTime(),
                     saved.getId()
             );
@@ -139,7 +139,7 @@ public class AlarmService {
                     transition.patientId(),
                     transition.alarmType(),
                     AlarmStatus.RESOLVED,
-                    alarmResolveMessage(transition.alarmType()),
+                    buildResolveMessage(transition.alarmType()),
                     transition.eventTime(),
                     null
             );
@@ -159,7 +159,7 @@ public class AlarmService {
                     transition.patientId(),
                     transition.alarmType(),
                     AlarmStatus.RESOLVED,
-                    alarmResolveMessage(transition.alarmType()),
+                    buildResolveMessage(transition.alarmType()),
                     transition.eventTime(),
                     eventId
             );
@@ -171,7 +171,10 @@ public class AlarmService {
         }
     }
 
-    private static String alarmMessage(AlarmType alarmType) {
+    /**
+     * 构造报警触发文案。
+     */
+    private static String buildTriggerMessage(AlarmType alarmType) {
         return switch (alarmType) {
             case TACHYCARDIA -> "心率过速 (>120bpm)";
             case BRADYCARDIA -> "心率过缓 (<50bpm)";
@@ -180,7 +183,10 @@ public class AlarmService {
         };
     }
 
-    private static String alarmResolveMessage(AlarmType alarmType) {
+    /**
+     * 构造报警恢复文案。
+     */
+    private static String buildResolveMessage(AlarmType alarmType) {
         return switch (alarmType) {
             case TACHYCARDIA -> "心率过速已恢复";
             case BRADYCARDIA -> "心率过缓已恢复";

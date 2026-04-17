@@ -60,25 +60,25 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
         String sessionId = session.getId();
         sessionManager.markClientActivity(sessionId);
 
-        JsonNode root;
+        JsonNode messageNode;
         try {
-            root = objectMapper.readTree(message.getPayload());
+            messageNode = objectMapper.readTree(message.getPayload());
         } catch (Exception e) {
             sendError(sessionId, null, "BAD_JSON", "消息不是合法 JSON");
             return;
         }
 
-        String messageType = text(root, "type");
-        String requestId = text(root, "requestId");
+        String messageType = text(messageNode, "type");
+        String requestId = text(messageNode, "requestId");
         if (messageType == null || messageType.isBlank()) {
             sendError(sessionId, requestId, "BAD_REQUEST", "缺少 type");
             return;
         }
 
         switch (messageType) {
-            case "subscribe" -> handleSubscribe(sessionId, requestId, text(root, "wardCode"));
-            case "unsubscribe" -> handleUnsubscribe(sessionId, requestId, text(root, "wardCode"));
-            case "ping" -> sendPong(sessionId, root.path("ts").asLong(System.currentTimeMillis()));
+            case "subscribe" -> handleSubscribe(sessionId, requestId, text(messageNode, "wardCode"));
+            case "unsubscribe" -> handleUnsubscribe(sessionId, requestId, text(messageNode, "wardCode"));
+            case "ping" -> sendPong(sessionId, messageNode.path("ts").asLong(System.currentTimeMillis()));
             default -> sendError(sessionId, requestId, "UNSUPPORTED_TYPE", "不支持的消息类型: " + messageType);
         }
     }
@@ -132,52 +132,55 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
         }
         nurseWardBroadcastService.unsubscribe(sessionId, wardCode);
 
-        var node = objectMapper.createObjectNode();
-        node.put("type", "unsubscribed");
+        var responseNode = objectMapper.createObjectNode();
+        responseNode.put("type", "unsubscribed");
         if (requestId != null) {
-            node.put("requestId", requestId);
+            responseNode.put("requestId", requestId);
         } else {
-            node.putNull("requestId");
+            responseNode.putNull("requestId");
         }
-        node.put("wardCode", wardCode);
-        node.put("serverTime", Instant.now().toString());
-        sendJson(sessionId, node);
+        responseNode.put("wardCode", wardCode);
+        responseNode.put("serverTime", Instant.now().toString());
+        sendJson(sessionId, responseNode);
     }
 
     private void sendSubscribed(String sessionId, String requestId, String wardCode) {
-        var node = objectMapper.createObjectNode();
-        node.put("type", "subscribed");
+        var responseNode = objectMapper.createObjectNode();
+        responseNode.put("type", "subscribed");
         if (requestId != null) {
-            node.put("requestId", requestId);
+            responseNode.put("requestId", requestId);
         } else {
-            node.putNull("requestId");
+            responseNode.putNull("requestId");
         }
-        node.put("wardCode", wardCode);
-        node.put("serverTime", Instant.now().toString());
-        sendJson(sessionId, node);
+        responseNode.put("wardCode", wardCode);
+        responseNode.put("serverTime", Instant.now().toString());
+        sendJson(sessionId, responseNode);
     }
 
     private void sendError(String sessionId, String requestId, String code, String message) {
-        var node = objectMapper.createObjectNode();
-        node.put("type", "error");
+        var responseNode = objectMapper.createObjectNode();
+        responseNode.put("type", "error");
         if (requestId != null) {
-            node.put("requestId", requestId);
+            responseNode.put("requestId", requestId);
         } else {
-            node.putNull("requestId");
+            responseNode.putNull("requestId");
         }
-        node.put("code", code);
-        node.put("message", message);
-        node.put("serverTime", Instant.now().toString());
-        sendJson(sessionId, node);
+        responseNode.put("code", code);
+        responseNode.put("message", message);
+        responseNode.put("serverTime", Instant.now().toString());
+        sendJson(sessionId, responseNode);
     }
 
     private void sendPong(String sessionId, long ts) {
-        var node = objectMapper.createObjectNode();
-        node.put("type", "pong");
-        node.put("ts", ts);
-        sendJson(sessionId, node);
+        var responseNode = objectMapper.createObjectNode();
+        responseNode.put("type", "pong");
+        responseNode.put("ts", ts);
+        sendJson(sessionId, responseNode);
     }
 
+    /**
+     * 序列化并发送 JSON 响应；发送失败时清理该会话订阅关系。
+     */
     private void sendJson(String sessionId, JsonNode payload) {
         try {
             boolean sent = sessionManager.sendTextMessage(sessionId, objectMapper.writeValueAsString(payload));
@@ -189,6 +192,9 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * 读取 JSON 字段文本值，缺失或为 null 时返回 {@code null}。
+     */
     private static String text(JsonNode node, String fieldName) {
         JsonNode field = node.get(fieldName);
         return field != null && !field.isNull() ? field.asText() : null;
