@@ -33,6 +33,9 @@ public class WebSocketHeartbeat {
         this.alarmService = alarmService;
     }
 
+    /**
+     * 周期性发送心跳并清理不可靠连接。
+     */
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MS)
     public void sendPing() {
         long now = System.currentTimeMillis();
@@ -47,6 +50,7 @@ public class WebSocketHeartbeat {
             if (lastClientMessageAt == null || now - lastClientMessageAt >= HEARTBEAT_INTERVAL_MS) {
                 int missedCount = sessionManager.incrementMissedPingCount(sessionId);
                 if (missedCount >= MAX_MISSED_PING_COUNT) {
+                    // 连续超阈值视为客户端不可达，主动断开避免占用会话与告警状态。
                     log.warn("[Heartbeat] 会话 {} 连续 {} 次心跳未响应，主动断开",
                             sessionId, missedCount);
                     closeAndCleanup(session, CloseStatus.SESSION_NOT_RELIABLE);
@@ -62,6 +66,9 @@ public class WebSocketHeartbeat {
         }
     }
 
+    /**
+     * 关闭会话并执行统一清理。
+     */
     private void closeAndCleanup(WebSocketSession session, CloseStatus closeStatus) {
         try {
             if (session.isOpen()) {
@@ -74,6 +81,9 @@ public class WebSocketHeartbeat {
         }
     }
 
+    /**
+     * 清理会话关联状态：报警、护士站订阅关系和会话映射。
+     */
     private void cleanupSession(WebSocketSession session) {
         Long bedId = sessionManager.getBedId(session.getId());
         Long patientId = sessionManager.getPatientId(session.getId());

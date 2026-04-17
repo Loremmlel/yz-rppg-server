@@ -60,7 +60,7 @@ public class GrpcFrameAnalysisClient {
     private final WebSocketSessionManager sessionManager;
     private final PatientVitalsService vitalsService;
     private final AlarmService alarmService;
-    private final NurseWardBroadcastService nurseWardBroadcastService;
+    private final NurseWardBroadcastService wardBroadcastService;
     private final ObjectMapper objectMapper;
     private final LoadTestProperties loadTestProperties;
 
@@ -88,7 +88,7 @@ public class GrpcFrameAnalysisClient {
         this.sessionManager = sessionManager;
         this.vitalsService = vitalsService;
         this.alarmService = alarmService;
-        this.nurseWardBroadcastService = nurseWardBroadcastService;
+        this.wardBroadcastService = nurseWardBroadcastService;
         this.loadTestProperties = loadTestProperties;
         this.objectMapper = new ObjectMapper();
         ManagedChannel channel = channelFactory.createChannel("frame-analysis");
@@ -138,7 +138,7 @@ public class GrpcFrameAnalysisClient {
             public void onError(Throwable t) {
                 statsLogger.recordGrpcError();
                 // 默认日志记录（可选，如果不想完全屏蔽可以保留，但此处按要求由 statsLogger 提供周期性统计报表）
-                log.debug("[gRPC] 会話 {} 分析请求失败: {}", sessionId, t.getMessage());
+                log.debug("[gRPC] 会话 {} 分析请求失败: {}", sessionId, t.getMessage());
             }
 
             @Override
@@ -279,15 +279,21 @@ public class GrpcFrameAnalysisClient {
         }
     }
 
+    /**
+     * 发布护士站病区增量（微批去重在广播服务内部完成）。
+     */
     private void publishWardDelta(String sessionId, FrameAnalysisResultDto result) {
         Long bedId = sessionManager.getBedId(sessionId);
         Long patientId = sessionManager.getPatientId(sessionId);
         if (bedId == null || patientId == null) {
             return;
         }
-        nurseWardBroadcastService.publishUpdate(bedId, patientId, result.getHr(), result.getSqi(), Instant.now());
+        wardBroadcastService.publishUpdate(bedId, patientId, result.getHr(), result.getSqi(), Instant.now());
     }
 
+    /**
+     * 触发报警状态机评估。
+     */
     private void evaluateAlarms(String sessionId, FrameAnalysisResultDto result) {
         Long bedId = sessionManager.getBedId(sessionId);
         Long patientId = sessionManager.getPatientId(sessionId);

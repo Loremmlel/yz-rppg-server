@@ -15,7 +15,20 @@ import youzi.lin.server.service.WardService;
 import java.time.Instant;
 
 /**
- * 护士站 WebSocket 处理器：处理病区订阅、取消订阅和快照同步。
+ * 护士站 WebSocket 处理器。
+ * <p>
+ * 负责护士站会话生命周期与文本协议处理：
+ * <ul>
+ *     <li>{@code subscribe}：订阅病区并返回初始快照</li>
+ *     <li>{@code unsubscribe}：取消病区订阅</li>
+ *     <li>{@code ping}：返回 {@code pong}</li>
+ * </ul>
+ * </p>
+ *
+ * <p>消息示例：</p>
+ * <pre>
+ * {"type":"subscribe","requestId":"r-1","wardCode":"A01"}
+ * </pre>
  */
 public class NurseStationWebSocketHandler extends TextWebSocketHandler {
 
@@ -55,18 +68,18 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        String type = text(root, "type");
+        String messageType = text(root, "type");
         String requestId = text(root, "requestId");
-        if (type == null || type.isBlank()) {
+        if (messageType == null || messageType.isBlank()) {
             sendError(sessionId, requestId, "BAD_REQUEST", "缺少 type");
             return;
         }
 
-        switch (type) {
+        switch (messageType) {
             case "subscribe" -> handleSubscribe(sessionId, requestId, text(root, "wardCode"));
             case "unsubscribe" -> handleUnsubscribe(sessionId, requestId, text(root, "wardCode"));
             case "ping" -> sendPong(sessionId, root.path("ts").asLong(System.currentTimeMillis()));
-            default -> sendError(sessionId, requestId, "UNSUPPORTED_TYPE", "不支持的消息类型: " + type);
+            default -> sendError(sessionId, requestId, "UNSUPPORTED_TYPE", "不支持的消息类型: " + messageType);
         }
     }
 
@@ -108,6 +121,7 @@ public class NurseStationWebSocketHandler extends TextWebSocketHandler {
 
         nurseWardBroadcastService.subscribe(sessionId, wardCode);
         sendSubscribed(sessionId, requestId, wardCode);
+        // 先回订阅成功，再发快照，方便前端把后续 snapshot 当作订阅后的数据流处理。
         nurseWardBroadcastService.sendSnapshot(sessionId, wardCode);
     }
 

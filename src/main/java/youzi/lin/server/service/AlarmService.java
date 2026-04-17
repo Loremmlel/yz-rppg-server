@@ -29,7 +29,7 @@ public class AlarmService {
 
     private final AlarmStateTracker tracker;
     private final AlarmEventRepository alarmEventRepository;
-    private final NurseWardAlarmPublisher nurseWardBroadcastService;
+    private final NurseWardAlarmPublisher nurseWardAlarmPublisher;
 
     /** bedId -> (alarmType -> active alarmEventId) */
     private final ConcurrentHashMap<Long, EnumMap<AlarmType, Long>> activeEventIds = new ConcurrentHashMap<>();
@@ -38,10 +38,10 @@ public class AlarmService {
 
     public AlarmService(AlarmStateTracker tracker,
                         AlarmEventRepository alarmEventRepository,
-                        NurseWardAlarmPublisher nurseWardBroadcastService) {
+                        NurseWardAlarmPublisher nurseWardAlarmPublisher) {
         this.tracker = tracker;
         this.alarmEventRepository = alarmEventRepository;
-        this.nurseWardBroadcastService = nurseWardBroadcastService;
+        this.nurseWardAlarmPublisher = nurseWardAlarmPublisher;
     }
 
     public void onSessionConnected(Long bedId, Long patientId) {
@@ -75,6 +75,12 @@ public class AlarmService {
         applyTransitions(tracker.checkTimeout(Instant.now()));
     }
 
+    /**
+     * 应用状态机输出的边沿变化。
+     * <p>
+     * 同一批 transitions 可能同时包含触发与恢复事件，按顺序依次落库并广播。
+     * </p>
+     */
     private void applyTransitions(List<AlarmStateTracker.Transition> transitions) {
         if (transitions == null || transitions.isEmpty()) {
             return;
@@ -104,7 +110,7 @@ public class AlarmService {
                     .computeIfAbsent(transition.bedId(), _ -> new EnumMap<>(AlarmType.class))
                     .put(transition.alarmType(), saved.getId());
 
-            nurseWardBroadcastService.publishAlarm(
+            nurseWardAlarmPublisher.publishAlarm(
                     transition.bedId(),
                     transition.patientId(),
                     transition.alarmType(),
@@ -128,7 +134,7 @@ public class AlarmService {
 
         if (eventId == null) {
             // 兼容服务重启后内存丢失：仍然广播解除，避免前端卡住 active 态。
-            nurseWardBroadcastService.publishAlarm(
+            nurseWardAlarmPublisher.publishAlarm(
                     transition.bedId(),
                     transition.patientId(),
                     transition.alarmType(),
@@ -148,7 +154,7 @@ public class AlarmService {
                 alarmEventRepository.save(entity);
             });
 
-            nurseWardBroadcastService.publishAlarm(
+            nurseWardAlarmPublisher.publishAlarm(
                     transition.bedId(),
                     transition.patientId(),
                     transition.alarmType(),

@@ -60,8 +60,8 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
         sessionManager.markClientActivity(session.getId());
-        var payload = message.getPayload().array();
-        frameBufferService.addFrame(session.getId(), payload);
+        var framePayload = message.getPayload().array();
+        frameBufferService.addFrame(session.getId(), framePayload);
     }
 
     @Override
@@ -88,6 +88,7 @@ public class BinaryFrameWebSocketHandler extends BinaryWebSocketHandler {
         var bedId = sessionManager.getBedId(sessionId);
         var patientId = sessionManager.getPatientId(sessionId);
         log.error("[WebSocket] 传输错误，会话：{}，原因：{}", sessionId, exception.getMessage());
+        // 与正常断开保持同一顺序：先刷 gRPC 缓冲，再清理本地会话映射。
         grpcClient.flushAndRemoveSession(sessionId);
         alarmService.onSessionDisconnected(bedId, patientId);
         sessionManager.remove(sessionId);

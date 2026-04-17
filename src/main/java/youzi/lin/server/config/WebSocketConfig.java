@@ -20,7 +20,8 @@ import youzi.lin.server.websocket.WebSocketSessionManager;
 /**
  * WebSocket 配置类。
  * <p>
- * 注册二进制帧处理器到根路径 "/"，并配置容器参数。
+ * 注册 bedside 与 nurse 两类 WebSocket 端点，并配置容器参数。
+ * bedside 端点为 {@code /ws}，护士站端点为 {@code /ws/nurse}。
  */
 @Configuration
 @EnableWebSocket
@@ -82,6 +83,12 @@ public class WebSocketConfig implements WebSocketConfigurer {
         );
     }
 
+    /**
+     * 构造护士站文本消息处理器。
+     * <p>
+     * 此处理器负责订阅/取消订阅、心跳 ping/pong 与错误回包。
+     * </p>
+     */
     @Bean
     public NurseStationWebSocketHandler nurseStationWebSocketHandler() {
         return new NurseStationWebSocketHandler(
