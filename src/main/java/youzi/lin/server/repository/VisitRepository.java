@@ -14,16 +14,37 @@ import java.util.Optional;
  * {@link Visit} 的 Spring Data JPA Repository。
  */
 @Repository
+@SuppressWarnings("unused")
 public interface VisitRepository extends JpaRepository<Visit, Long> {
 
+    /**
+     * 查询患者的全部就诊记录。
+     */
+    //noinspection unused
     List<Visit> findByPatient(Patient patient);
 
+    /**
+     * 按患者 ID 查询就诊记录。
+     */
+    //noinspection unused
     List<Visit> findByPatientId(Long patientId);
 
+    /**
+     * 查询床位的全部就诊记录。
+     */
+    //noinspection unused
     List<Visit> findByBed(Bed bed);
 
+    /**
+     * 按床位 ID 查询就诊记录。
+     */
+    //noinspection unused
     List<Visit> findByBedId(Long bedId);
 
+    /**
+     * 按就诊状态查询记录。
+     */
+    //noinspection unused
     List<Visit> findByStatus(VisitStatus status);
 
     /**

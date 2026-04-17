@@ -14,23 +14,46 @@ import java.util.Optional;
  * {@link Bed} 的 Spring Data JPA Repository。
  */
 @Repository
+@SuppressWarnings("unused")
 public interface BedRepository extends JpaRepository<Bed, Long> {
 
+    /**
+     * 判断病区编码是否存在。
+     */
     boolean existsByWardCode(String wardCode);
 
+    /**
+     * 按病区查询床位。
+     */
     List<Bed> findByWardCode(String wardCode);
 
+    /**
+     * 按床位状态查询。
+     */
+    //noinspection unused
     List<Bed> findByStatus(BedStatus status);
 
+    /**
+     * 按病区与状态查询床位。
+     */
+    //noinspection unused
     List<Bed> findByWardCodeAndStatus(String wardCode, BedStatus status);
 
+    /**
+     * 按病区与病房号查询床位。
+     */
     List<Bed> findByWardCodeAndRoomNo(String wardCode, String roomNo);
 
     /**
      * 按设备序列号查询床位（WebSocket 连接时用于设备身份识别）。
      */
+    //noinspection unused
     Optional<Bed> findByDeviceSn(String deviceSn);
 
+    /**
+     * 按病区/病房/床号定位唯一床位。
+     */
+    //noinspection unused
     Optional<Bed> findByWardCodeAndRoomNoAndBedNo(String wardCode, String roomNo, String bedNo);
 
     /**

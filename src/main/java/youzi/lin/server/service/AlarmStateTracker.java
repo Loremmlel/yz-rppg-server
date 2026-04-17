@@ -24,13 +24,20 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class AlarmStateTracker {
 
+    /** 心率过速触发持续时间阈值（毫秒）。 */
     private static final long TACHY_TRIGGER_MS = 15_000L;
+    /** 心率过速恢复持续时间阈值（毫秒）。 */
     private static final long TACHY_RESOLVE_MS = 10_000L;
+    /** 心率过缓触发持续时间阈值（毫秒）。 */
     private static final long BRADY_TRIGGER_MS = 10_000L;
+    /** 心率过缓恢复持续时间阈值（毫秒）。 */
     private static final long BRADY_RESOLVE_MS = 10_000L;
+    /** 低信号质量触发持续时间阈值（毫秒）。 */
     private static final long LOW_SQI_TRIGGER_MS = 20_000L;
+    /** 低信号质量恢复持续时间阈值（毫秒）。 */
     private static final long LOW_SQI_RESOLVE_MS = 10_000L;
 
+    /** 在线会话离线超时阈值（毫秒）。 */
     private static final long OFFLINE_TIMEOUT_MS = 30_000L;
 
     private final ConcurrentHashMap<Long, BedAlarmState> bedStates = new ConcurrentHashMap<>();
