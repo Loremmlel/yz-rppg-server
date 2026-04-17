@@ -5,6 +5,7 @@ target/
 !**/src/test/**/target/
 
 application.yaml
+results/
 
 ### STS ###
 .apt_generated

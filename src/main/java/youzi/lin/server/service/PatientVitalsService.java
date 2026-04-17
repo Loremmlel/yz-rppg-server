@@ -76,6 +76,7 @@ public class PatientVitalsService {
      * @param patientId 当前床位在院患者 ID（可为 null）
      * @param time      数据时间戳（通常为当前时刻）
      */
+    @SuppressWarnings("unused")
     @Transactional
     public void save(FrameAnalysisResultDto result, Long bedId, Long patientId, Instant time) {
         if (bedId == null || patientId == null) {
@@ -156,7 +157,7 @@ public class PatientVitalsService {
     public List<VitalsRealtimeDto> getRealtimeByBedId(Long bedId, int durationSeconds) {
         var since = Instant.now().minusSeconds(durationSeconds);
         var entities = repository.findByBedIdAndTimeAfterOrderByTimeDesc(bedId, since);
-        return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
+        return entities.stream().map(PatientVitalsService::toRealtimeDto).toList();
     }
 
     /**
@@ -165,10 +166,11 @@ public class PatientVitalsService {
      * @param patientId       患者 ID
      * @param durationSeconds 时间窗口大小（秒）
      */
+    @SuppressWarnings("unused")
     public List<VitalsRealtimeDto> getRealtimeByPatientId(Long patientId, int durationSeconds) {
         var since = Instant.now().minusSeconds(durationSeconds);
         var entities = repository.findByPatientIdAndTimeAfterOrderByTimeDesc(patientId, since);
-        return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
+        return entities.stream().map(PatientVitalsService::toRealtimeDto).toList();
     }
 
     /**
@@ -181,7 +183,7 @@ public class PatientVitalsService {
     public List<VitalsRealtimeDto> getRealtimeByBedIdAndPatientId(Long bedId, Long patientId, int durationSeconds) {
         var since = Instant.now().minusSeconds(durationSeconds);
         var entities = repository.findByBedIdAndPatientIdAndTimeAfterOrderByTimeDesc(bedId, patientId, since);
-        return entities.stream().map(PatientVitalsService::toRealtimeDTO).toList();
+        return entities.stream().map(PatientVitalsService::toRealtimeDto).toList();
     }
 
     /**
@@ -195,7 +197,7 @@ public class PatientVitalsService {
      */
     public List<VitalsTrendDto> getTrendByBedIdAndPatientId(Long bedId, Long patientId, Instant start, Instant end, String interval) {
         var rows = repository.aggregateByBedIdAndPatientId(bedId, patientId, start, end, interval);
-        return rows.stream().map(PatientVitalsService::toTrendDTO).toList();
+        return rows.stream().map(PatientVitalsService::toTrendDto).toList();
     }
 
     /**
@@ -203,7 +205,7 @@ public class PatientVitalsService {
      */
     public VitalsRealtimeDto getLatestByBedId(Long bedId) {
         var entity = repository.findLatestByBedId(bedId);
-        return entity != null ? toRealtimeDTO(entity) : null;
+        return entity != null ? toRealtimeDto(entity) : null;
     }
 
     /**
@@ -211,7 +213,7 @@ public class PatientVitalsService {
      */
     public VitalsRealtimeDto getLatestByPatientId(Long patientId) {
         var entity = repository.findLatestByPatientId(patientId);
-        return entity != null ? toRealtimeDTO(entity) : null;
+        return entity != null ? toRealtimeDto(entity) : null;
     }
 
     /**
@@ -239,7 +241,7 @@ public class PatientVitalsService {
      * 将 {@link PatientVitals} 实体转换为前端实时明细 DTO，
      * 仅当 HRV 数据存在时才填充时域/频域分组，避免返回全为 null 的无意义对象。
      */
-    private static VitalsRealtimeDto toRealtimeDTO(PatientVitals e) {
+    private static VitalsRealtimeDto toRealtimeDto(PatientVitals e) {
         var dto = new VitalsRealtimeDto();
         dto.setTime(e.getTime());
         dto.setBedId(e.getBedId());
@@ -252,44 +254,50 @@ public class PatientVitalsService {
 
         // HRV 数据仅在存在时填充（SQI 不足时各字段均为 null，整个分组返回全 null 对象）
         if (e.getHrvSdnn() != null || e.getHrvRmssd() != null) {
-            var td = getHrvTimeDomain(e);
-            dto.setHrvTimeDomain(td);
+            var timeDomain = buildHrvTimeDomain(e);
+            dto.setHrvTimeDomain(timeDomain);
 
-            var fd = getHrvFreqDomain(e);
-            dto.setHrvFreqDomain(fd);
+            var freqDomain = buildHrvFreqDomain(e);
+            dto.setHrvFreqDomain(freqDomain);
         }
 
         return dto;
     }
 
-    private static VitalsRealtimeDto.@NonNull HrvTimeDomain getHrvTimeDomain(PatientVitals e) {
-        var td = new VitalsRealtimeDto.HrvTimeDomain();
-        td.setBpm(e.getHrvBpm());
-        td.setIbi(e.getHrvIbi());
-        td.setSdnn(e.getHrvSdnn());
-        td.setSdsd(e.getHrvSdsd());
-        td.setRmssd(e.getHrvRmssd());
-        td.setPnn20(e.getHrvPnn20());
-        td.setPnn50(e.getHrvPnn50());
-        td.setHrMad(e.getHrvHrMad());
-        td.setSd1(e.getHrvSd1());
-        td.setSd2(e.getHrvSd2());
-        td.setS(e.getHrvS());
-        td.setSd1Sd2(e.getHrvSd1Sd2());
-        return td;
+    /**
+     * 组装 HRV 时域指标 DTO。
+     */
+    private static VitalsRealtimeDto.@NonNull HrvTimeDomain buildHrvTimeDomain(PatientVitals e) {
+        var timeDomain = new VitalsRealtimeDto.HrvTimeDomain();
+        timeDomain.setBpm(e.getHrvBpm());
+        timeDomain.setIbi(e.getHrvIbi());
+        timeDomain.setSdnn(e.getHrvSdnn());
+        timeDomain.setSdsd(e.getHrvSdsd());
+        timeDomain.setRmssd(e.getHrvRmssd());
+        timeDomain.setPnn20(e.getHrvPnn20());
+        timeDomain.setPnn50(e.getHrvPnn50());
+        timeDomain.setHrMad(e.getHrvHrMad());
+        timeDomain.setSd1(e.getHrvSd1());
+        timeDomain.setSd2(e.getHrvSd2());
+        timeDomain.setS(e.getHrvS());
+        timeDomain.setSd1Sd2(e.getHrvSd1Sd2());
+        return timeDomain;
     }
 
-    private static VitalsRealtimeDto.@NonNull HrvFreqDomain getHrvFreqDomain(PatientVitals e) {
-        var fd = new VitalsRealtimeDto.HrvFreqDomain();
-        fd.setVlf(scaleFreqValue(e.getHrvVlf()));
-        fd.setTp(scaleFreqValue(e.getHrvTp()));
-        fd.setHf(scaleFreqValue(e.getHrvHf()));
-        fd.setLf(scaleFreqValue(e.getHrvLf()));
-        fd.setLfHf(e.getHrvLfHf());
-        return fd;
+    /**
+     * 组装 HRV 频域指标 DTO，并统一完成单位换算。
+     */
+    private static VitalsRealtimeDto.@NonNull HrvFreqDomain buildHrvFreqDomain(PatientVitals e) {
+        var freqDomain = new VitalsRealtimeDto.HrvFreqDomain();
+        freqDomain.setVlf(scaleFreqValue(e.getHrvVlf()));
+        freqDomain.setTp(scaleFreqValue(e.getHrvTp()));
+        freqDomain.setHf(scaleFreqValue(e.getHrvHf()));
+        freqDomain.setLf(scaleFreqValue(e.getHrvLf()));
+        freqDomain.setLfHf(e.getHrvLfHf());
+        return freqDomain;
     }
 
-    private static VitalsTrendDto toTrendDTO(VitalsAggregationRow row) {
+    private static VitalsTrendDto toTrendDto(VitalsAggregationRow row) {
         var dto = new VitalsTrendDto();
         dto.setBucketTime(row.getBucketTime());
 

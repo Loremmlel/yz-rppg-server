@@ -13,6 +13,13 @@ import youzi.lin.server.service.LoadTestNurseScenarioService;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * 护士站压测场景控制器。
+ * <p>
+ * 提供目标床位查询、心率阶跃场景触发、运行状态查看和报警事件回放接口，
+ * 仅在 {@code loadtest} profile 启用。
+ * </p>
+ */
 @RestController
 @Profile("loadtest")
 @RequestMapping("/api/loadtest/scenario")
@@ -27,12 +34,31 @@ public class LoadTestNurseScenarioController {
         this.alarmEventRepository = alarmEventRepository;
     }
 
+    /**
+     * 列出可用于场景注入的床位目标。
+     *
+     * @param wardCode 可选病区编码；为空时返回全部病区床位
+     */
     @GetMapping("/targets")
-    public List<LoadTestNurseScenarioService.ScenarioBedTarget> targets(
+    public List<LoadTestNurseScenarioService.ScenarioBedTarget> listTargets(
             @RequestParam(required = false) String wardCode) {
         return scenarioService.listTargets(wardCode);
     }
 
+    /**
+     * 启动心率阶跃场景（基线 -> 高心率 -> 恢复）。
+     * <p>
+     * 示例请求体：
+     * <pre>
+     * {
+     *   "bedId": 12,
+     *   "baselineSeconds": 2,
+     *   "highSeconds": 20,
+     *   "recoverySeconds": 12
+     * }
+     * </pre>
+     * </p>
+     */
     @PostMapping("/hr-jump")
     public LoadTestNurseScenarioService.ScenarioStartResult startHrJump(
             @RequestBody HrJumpScenarioRequest request) {
@@ -49,14 +75,20 @@ public class LoadTestNurseScenarioController {
         );
     }
 
+    /**
+     * 查询指定床位当前场景运行状态。
+     */
     @GetMapping("/status")
     public LoadTestNurseScenarioService.ScenarioRunStatus status(@RequestParam Long bedId) {
         return scenarioService.getStatus(bedId);
     }
 
+    /**
+     * 查询指定床位最近报警事件（按触发时间排序返回）。
+     */
     @GetMapping("/alarm-events")
-    public List<AlarmEventView> alarmEvents(@RequestParam Long bedId,
-                                            @RequestParam(defaultValue = "10") int limit) {
+    public List<AlarmEventView> listAlarmEvents(@RequestParam Long bedId,
+                                                @RequestParam(defaultValue = "10") int limit) {
         int safeLimit = Math.clamp(limit, 1, 50);
         return alarmEventRepository.findTop50ByBedIdOrderByTriggerTimeDesc(bedId).stream()
                 .map(AlarmEventView::from)
@@ -65,6 +97,9 @@ public class LoadTestNurseScenarioController {
                 .toList();
     }
 
+    /**
+     * 心率阶跃场景请求参数。
+     */
     public record HrJumpScenarioRequest(Long bedId,
                                         Long patientId,
                                         Integer baselineSeconds,
@@ -72,6 +107,9 @@ public class LoadTestNurseScenarioController {
                                         Integer recoverySeconds) {
     }
 
+    /**
+     * 报警事件对外展示视图。
+     */
     public record AlarmEventView(Long id,
                                  Long patientId,
                                  Long bedId,

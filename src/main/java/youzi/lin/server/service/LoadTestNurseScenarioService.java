@@ -22,6 +22,17 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * 护士站压测场景编排服务。
+ * <p>
+ * 职责：
+ * <ul>
+ *     <li>按床位生成可复现的心率阶跃序列（基线、高值、恢复）</li>
+ *     <li>按秒驱动护士站增量推送、报警评估和时序数据入库</li>
+ *     <li>维护场景运行状态，支持同床位任务覆盖</li>
+ * </ul>
+ * </p>
+ */
 @Service
 @Profile("loadtest")
 public class LoadTestNurseScenarioService {
@@ -62,6 +73,11 @@ public class LoadTestNurseScenarioService {
         scheduler.shutdownNow();
     }
 
+    /**
+     * 列出可注入压测场景的床位目标。
+     *
+     * @param wardCode 可选病区编码；为空时返回全量床位
+     */
     public List<ScenarioBedTarget> listTargets(String wardCode) {
         List<Bed> beds = (wardCode == null || wardCode.isBlank())
                 ? bedRepository.findAll()
@@ -80,6 +96,15 @@ public class LoadTestNurseScenarioService {
         }).toList();
     }
 
+    /**
+     * 启动（或覆盖）指定床位的心率阶跃场景。
+     *
+     * @param bedId 目标床位
+     * @param patientId 可选患者 ID；为空时自动解析当前在院患者
+     * @param baselineSeconds 基线阶段时长
+     * @param highSeconds 高心率阶段时长
+     * @param recoverySeconds 恢复阶段时长
+     */
     public ScenarioStartResult startHrJumpScenario(Long bedId,
                                                     Long patientId,
                                                     int baselineSeconds,
@@ -97,13 +122,15 @@ public class LoadTestNurseScenarioService {
             throw new IllegalArgumentException("床位没有在院患者，且未指定 patientId");
         }
 
-        int safeBaseline = Math.max(1, baselineSeconds);
-        int safeHigh = Math.max(16, highSeconds);
-        int safeRecovery = Math.max(11, recoverySeconds);
+        int baselineDurationSeconds = Math.max(1, baselineSeconds);
+        // 高心率至少 16 秒，确保触发窗口（15 秒）内有稳定样本。
+        int highDurationSeconds = Math.max(16, highSeconds);
+        // 恢复至少 11 秒，覆盖恢复窗口（10 秒）并留出 1 秒抖动余量。
+        int recoveryDurationSeconds = Math.max(11, recoverySeconds);
 
         var runId = UUID.randomUUID().toString();
         var startTime = Instant.now();
-        var steps = buildSteps(safeBaseline, safeHigh, safeRecovery);
+        var steps = buildSteps(baselineDurationSeconds, highDurationSeconds, recoveryDurationSeconds);
 
         ScenarioRun run = new ScenarioRun(runId, bedId, bed.getWardCode(), resolvedPatientId, startTime, steps.size());
 
@@ -113,7 +140,7 @@ public class LoadTestNurseScenarioService {
         }
 
         AtomicInteger index = new AtomicInteger(0);
-        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(() -> {
+        run.future = scheduler.scheduleAtFixedRate(() -> {
             int i = index.getAndIncrement();
             if (i >= steps.size()) {
                 run.markFinished();
@@ -130,20 +157,21 @@ public class LoadTestNurseScenarioService {
             run.lastEventTime = eventTime;
         }, 0, 1, TimeUnit.SECONDS);
 
-        run.future = future;
-
         return new ScenarioStartResult(
                 runId,
                 bedId,
                 bed.getWardCode(),
                 resolvedPatientId,
                 startTime,
-                startTime.plusSeconds(safeBaseline + 15L),
-                startTime.plusSeconds(safeBaseline + safeHigh + 10L),
+                startTime.plusSeconds(baselineDurationSeconds + 15L),
+                startTime.plusSeconds(baselineDurationSeconds + highDurationSeconds + 10L),
                 steps.size()
         );
     }
 
+    /**
+     * 查询床位当前场景状态；无活动任务时返回 {@code null}。
+     */
     public ScenarioRunStatus getStatus(Long bedId) {
         if (bedId == null) {
             return null;
@@ -167,6 +195,9 @@ public class LoadTestNurseScenarioService {
         );
     }
 
+    /**
+     * 发布单个场景 tick 到各下游：护士站增量、报警状态机和时序库。
+     */
     private void publishTick(Long bedId, Long patientId, double hr, double sqi, Instant eventTime) {
         nurseWardBroadcastService.publishUpdate(bedId, patientId, hr, sqi, eventTime);
         alarmService.evaluateVitals(bedId, patientId, hr, sqi, eventTime);
@@ -193,6 +224,9 @@ public class LoadTestNurseScenarioService {
                 .orElse(null);
     }
 
+    /**
+     * 构建 1Hz 场景序列：基线（115）-> 高值（125）-> 恢复（105）。
+     */
     private static List<ScenarioStep> buildSteps(int baselineSeconds, int highSeconds, int recoverySeconds) {
         List<ScenarioStep> steps = new ArrayList<>(baselineSeconds + highSeconds + recoverySeconds);
         for (int i = 0; i < baselineSeconds; i++) {
@@ -207,6 +241,9 @@ public class LoadTestNurseScenarioService {
         return steps;
     }
 
+    /**
+     * 可触发场景的床位目标。
+     */
     public record ScenarioBedTarget(Long bedId,
                                     String wardCode,
                                     String roomNo,
@@ -214,6 +251,9 @@ public class LoadTestNurseScenarioService {
                                     Long admittedPatientId) {
     }
 
+    /**
+     * 场景启动结果。
+     */
     public record ScenarioStartResult(String runId,
                                       Long bedId,
                                       String wardCode,
@@ -224,6 +264,9 @@ public class LoadTestNurseScenarioService {
                                       int plannedTicks) {
     }
 
+    /**
+     * 场景实时状态。
+     */
     public record ScenarioRunStatus(String runId,
                                     Long bedId,
                                     String wardCode,

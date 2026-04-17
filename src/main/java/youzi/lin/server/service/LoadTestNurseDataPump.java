@@ -18,6 +18,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 护士站压测数据泵。
+ * <p>
+ * 在 {@code loadtest} profile 下按固定频率生成模拟 HR/SQI 增量并广播，
+ * 用于验证护士站订阅链路在高频更新下的吞吐和稳定性。
+ * </p>
+ */
 @Service
 @Profile("loadtest")
 public class LoadTestNurseDataPump {
@@ -45,6 +52,9 @@ public class LoadTestNurseDataPump {
         this.nurseWardBroadcastService = nurseWardBroadcastService;
     }
 
+    /**
+     * 根据配置在应用启动后自动开启数据泵。
+     */
     @PostConstruct
     void startIfEnabled() {
         if (!loadTestProperties.getNursePump().isEnabled()) {
@@ -61,6 +71,7 @@ public class LoadTestNurseDataPump {
             return;
         }
 
+        // 下限 10ms，避免配置错误导致 scheduleAtFixedRate 过度占用 CPU。
         long intervalMs = Math.max(10, loadTestProperties.getNursePump().getIntervalMs());
         scheduler.scheduleAtFixedRate(this::emitBatch, 1000, intervalMs, TimeUnit.MILLISECONDS);
         log.info("[LoadTest] nurse pump started: wardCode={}, beds={}, intervalMs={}, patientsPerTick={}",
@@ -70,11 +81,17 @@ public class LoadTestNurseDataPump {
                 loadTestProperties.getNursePump().getPatientsPerTick());
     }
 
+    /**
+     * 应用关闭时停止后台调度线程。
+     */
     @PreDestroy
     void shutdown() {
         scheduler.shutdownNow();
     }
 
+    /**
+     * 生成并发布一批模拟患者更新。
+     */
     private void emitBatch() {
         int updates = Math.max(1, loadTestProperties.getNursePump().getPatientsPerTick());
         for (int i = 0; i < updates; i++) {
