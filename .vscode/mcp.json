@@ -1,0 +1,20 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "postgres_url",
+      "description": "PostgreSQL connection string for this project (for example: postgresql://postgres:***@localhost:5432/rppg)",
+      "password": true
+    }
+  ],
+  "servers": {
+    "postgres-rppg": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "${input:postgres_url}"
+      ]
+    }
+  }
+}
