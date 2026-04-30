@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="540">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="490" y="28" text-anchor="middle" font-size="20" font-family="Arial">Bedside Latency vs Beds</text>
+<line x1="70" y1="480" x2="960" y2="480" stroke="#111827"/>
+<line x1="70" y1="50" x2="70" y2="480" stroke="#111827"/>
+<line x1="70" y1="480" x2="960" y2="480" stroke="#e5e7eb"/>
+<text x="62" y="484" text-anchor="end" font-size="12" font-family="Arial">0.0</text>
+<line x1="70" y1="394" x2="960" y2="394" stroke="#e5e7eb"/>
+<text x="62" y="398" text-anchor="end" font-size="12" font-family="Arial">0.1</text>
+<line x1="70" y1="308" x2="960" y2="308" stroke="#e5e7eb"/>
+<text x="62" y="312" text-anchor="end" font-size="12" font-family="Arial">0.2</text>
+<line x1="70" y1="222" x2="960" y2="222" stroke="#e5e7eb"/>
+<text x="62" y="226" text-anchor="end" font-size="12" font-family="Arial">0.3</text>
+<line x1="70" y1="136" x2="960" y2="136" stroke="#e5e7eb"/>
+<text x="62" y="140" text-anchor="end" font-size="12" font-family="Arial">0.4</text>
+<line x1="70" y1="50" x2="960" y2="50" stroke="#e5e7eb"/>
+<text x="62" y="54" text-anchor="end" font-size="12" font-family="Arial">0.6</text>
+<line x1="70" y1="50" x2="70" y2="480" stroke="#f3f4f6"/>
+<text x="70" y="500" text-anchor="middle" font-size="12" font-family="Arial">16</text>
+<line x1="89" y1="50" x2="89" y2="480" stroke="#f3f4f6"/>
+<text x="89" y="500" text-anchor="middle" font-size="12" font-family="Arial">32</text>
+<line x1="127" y1="50" x2="127" y2="480" stroke="#f3f4f6"/>
+<text x="127" y="500" text-anchor="middle" font-size="12" font-family="Arial">64</text>
+<line x1="203" y1="50" x2="203" y2="480" stroke="#f3f4f6"/>
+<text x="203" y="500" text-anchor="middle" font-size="12" font-family="Arial">128</text>
+<line x1="354" y1="50" x2="354" y2="480" stroke="#f3f4f6"/>
+<text x="354" y="500" text-anchor="middle" font-size="12" font-family="Arial">256</text>
+<line x1="657" y1="50" x2="657" y2="480" stroke="#f3f4f6"/>
+<text x="657" y="500" text-anchor="middle" font-size="12" font-family="Arial">512</text>
+<line x1="960" y1="50" x2="960" y2="480" stroke="#f3f4f6"/>
+<text x="960" y="500" text-anchor="middle" font-size="12" font-family="Arial">768</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="70,307 89,283 127,267 203,238 354,164 657,115 960,89"/>
+<circle cx="70" cy="307" r="3" fill="#2563eb"/>
+<circle cx="89" cy="283" r="3" fill="#2563eb"/>
+<circle cx="127" cy="267" r="3" fill="#2563eb"/>
+<circle cx="203" cy="238" r="3" fill="#2563eb"/>
+<circle cx="354" cy="164" r="3" fill="#2563eb"/>
+<circle cx="657" cy="115" r="3" fill="#2563eb"/>
+<circle cx="960" cy="89" r="3" fill="#2563eb"/>
+<line x1="770" y1="62" x2="794" y2="62" stroke="#2563eb" stroke-width="3"/>
+<text x="800" y="66" font-size="12" font-family="Arial">send_p95</text>
+<polyline fill="none" stroke="#dc2626" stroke-width="2" points="70,480 89,480 127,480 203,480 354,480 657,480 960,480"/>
+<circle cx="70" cy="480" r="3" fill="#dc2626"/>
+<circle cx="89" cy="480" r="3" fill="#dc2626"/>
+<circle cx="127" cy="480" r="3" fill="#dc2626"/>
+<circle cx="203" cy="480" r="3" fill="#dc2626"/>
+<circle cx="354" cy="480" r="3" fill="#dc2626"/>
+<circle cx="657" cy="480" r="3" fill="#dc2626"/>
+<circle cx="960" cy="480" r="3" fill="#dc2626"/>
+<line x1="770" y1="82" x2="794" y2="82" stroke="#dc2626" stroke-width="3"/>
+<text x="800" y="86" font-size="12" font-family="Arial">recv_delay_p95</text>
+<text x="515" y="525" text-anchor="middle" font-size="13" font-family="Arial">Beds</text>
+<text x="18" y="265" transform="rotate(-90 18 265)" text-anchor="middle" font-size="13" font-family="Arial">Latency (ms)</text>
+</svg>

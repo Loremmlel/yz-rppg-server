@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="540">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="490" y="28" text-anchor="middle" font-size="20" font-family="Arial">Bedside Runtime Heap</text>
+<line x1="70" y1="480" x2="960" y2="480" stroke="#111827"/>
+<line x1="70" y1="50" x2="70" y2="480" stroke="#111827"/>
+<line x1="70" y1="480" x2="960" y2="480" stroke="#e5e7eb"/>
+<text x="62" y="484" text-anchor="end" font-size="12" font-family="Arial">0.0</text>
+<line x1="70" y1="394" x2="960" y2="394" stroke="#e5e7eb"/>
+<text x="62" y="398" text-anchor="end" font-size="12" font-family="Arial">590.4</text>
+<line x1="70" y1="308" x2="960" y2="308" stroke="#e5e7eb"/>
+<text x="62" y="312" text-anchor="end" font-size="12" font-family="Arial">1180.8</text>
+<line x1="70" y1="222" x2="960" y2="222" stroke="#e5e7eb"/>
+<text x="62" y="226" text-anchor="end" font-size="12" font-family="Arial">1771.3</text>
+<line x1="70" y1="136" x2="960" y2="136" stroke="#e5e7eb"/>
+<text x="62" y="140" text-anchor="end" font-size="12" font-family="Arial">2361.7</text>
+<line x1="70" y1="50" x2="960" y2="50" stroke="#e5e7eb"/>
+<text x="62" y="54" text-anchor="end" font-size="12" font-family="Arial">2952.1</text>
+<line x1="70" y1="50" x2="70" y2="480" stroke="#f3f4f6"/>
+<text x="70" y="500" text-anchor="middle" font-size="12" font-family="Arial">16</text>
+<line x1="99" y1="50" x2="99" y2="480" stroke="#f3f4f6"/>
+<text x="99" y="500" text-anchor="middle" font-size="12" font-family="Arial">32</text>
+<line x1="156" y1="50" x2="156" y2="480" stroke="#f3f4f6"/>
+<text x="156" y="500" text-anchor="middle" font-size="12" font-family="Arial">64</text>
+<line x1="271" y1="50" x2="271" y2="480" stroke="#f3f4f6"/>
+<text x="271" y="500" text-anchor="middle" font-size="12" font-family="Arial">128</text>
+<line x1="501" y1="50" x2="501" y2="480" stroke="#f3f4f6"/>
+<text x="501" y="500" text-anchor="middle" font-size="12" font-family="Arial">256</text>
+<line x1="960" y1="50" x2="960" y2="480" stroke="#f3f4f6"/>
+<text x="960" y="500" text-anchor="middle" font-size="12" font-family="Arial">512</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="70,299 99,280 156,275 271,211 501,89 960,96"/>
+<circle cx="70" cy="299" r="3" fill="#2563eb"/>
+<circle cx="99" cy="280" r="3" fill="#2563eb"/>
+<circle cx="156" cy="275" r="3" fill="#2563eb"/>
+<circle cx="271" cy="211" r="3" fill="#2563eb"/>
+<circle cx="501" cy="89" r="3" fill="#2563eb"/>
+<circle cx="960" cy="96" r="3" fill="#2563eb"/>
+<line x1="770" y1="62" x2="794" y2="62" stroke="#2563eb" stroke-width="3"/>
+<text x="800" y="66" font-size="12" font-family="Arial">heap_avg_mb</text>
+<text x="515" y="525" text-anchor="middle" font-size="13" font-family="Arial">beds</text>
+<text x="18" y="265" transform="rotate(-90 18 265)" text-anchor="middle" font-size="13" font-family="Arial">Heap avg (MB)</text>
+</svg>

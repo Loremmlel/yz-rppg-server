@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="540">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="490" y="28" text-anchor="middle" font-size="20" font-family="Arial">Bedside Runtime Resource (CPU + GC)</text>
+<line x1="70" y1="480" x2="910" y2="480" stroke="#111827"/>
+<line x1="70" y1="50" x2="70" y2="480" stroke="#2563eb"/>
+<line x1="910" y1="50" x2="910" y2="480" stroke="#dc2626"/>
+<line x1="70" y1="480" x2="910" y2="480" stroke="#e5e7eb"/>
+<text x="62" y="484" text-anchor="end" font-size="12" fill="#2563eb" font-family="Arial">0.0</text>
+<text x="918" y="484" text-anchor="start" font-size="12" fill="#dc2626" font-family="Arial">0.0</text>
+<line x1="70" y1="394" x2="910" y2="394" stroke="#e5e7eb"/>
+<text x="62" y="398" text-anchor="end" font-size="12" fill="#2563eb" font-family="Arial">20.0</text>
+<text x="918" y="398" text-anchor="start" font-size="12" fill="#dc2626" font-family="Arial">3.2</text>
+<line x1="70" y1="308" x2="910" y2="308" stroke="#e5e7eb"/>
+<text x="62" y="312" text-anchor="end" font-size="12" fill="#2563eb" font-family="Arial">40.0</text>
+<text x="918" y="312" text-anchor="start" font-size="12" fill="#dc2626" font-family="Arial">6.4</text>
+<line x1="70" y1="222" x2="910" y2="222" stroke="#e5e7eb"/>
+<text x="62" y="226" text-anchor="end" font-size="12" fill="#2563eb" font-family="Arial">60.0</text>
+<text x="918" y="226" text-anchor="start" font-size="12" fill="#dc2626" font-family="Arial">9.6</text>
+<line x1="70" y1="136" x2="910" y2="136" stroke="#e5e7eb"/>
+<text x="62" y="140" text-anchor="end" font-size="12" fill="#2563eb" font-family="Arial">80.0</text>
+<text x="918" y="140" text-anchor="start" font-size="12" fill="#dc2626" font-family="Arial">12.8</text>
+<line x1="70" y1="50" x2="910" y2="50" stroke="#e5e7eb"/>
+<text x="62" y="54" text-anchor="end" font-size="12" fill="#2563eb" font-family="Arial">100.0</text>
+<text x="918" y="54" text-anchor="start" font-size="12" fill="#dc2626" font-family="Arial">16.0</text>
+<line x1="70" y1="50" x2="70" y2="480" stroke="#f3f4f6"/>
+<text x="70" y="500" text-anchor="middle" font-size="12" font-family="Arial">16</text>
+<line x1="97" y1="50" x2="97" y2="480" stroke="#f3f4f6"/>
+<text x="97" y="500" text-anchor="middle" font-size="12" font-family="Arial">32</text>
+<line x1="151" y1="50" x2="151" y2="480" stroke="#f3f4f6"/>
+<text x="151" y="500" text-anchor="middle" font-size="12" font-family="Arial">64</text>
+<line x1="260" y1="50" x2="260" y2="480" stroke="#f3f4f6"/>
+<text x="260" y="500" text-anchor="middle" font-size="12" font-family="Arial">128</text>
+<line x1="476" y1="50" x2="476" y2="480" stroke="#f3f4f6"/>
+<text x="476" y="500" text-anchor="middle" font-size="12" font-family="Arial">256</text>
+<line x1="910" y1="50" x2="910" y2="480" stroke="#f3f4f6"/>
+<text x="910" y="500" text-anchor="middle" font-size="12" font-family="Arial">512</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="70,473 97,464 151,447 260,404 476,254 910,143"/>
+<polyline fill="none" stroke="#dc2626" stroke-width="2" points="70,467 97,467 151,457 260,410 476,130 910,89"/>
+<circle cx="70" cy="473" r="3" fill="#2563eb"/>
+<circle cx="70" cy="467" r="3" fill="#dc2626"/>
+<circle cx="97" cy="464" r="3" fill="#2563eb"/>
+<circle cx="97" cy="467" r="3" fill="#dc2626"/>
+<circle cx="151" cy="447" r="3" fill="#2563eb"/>
+<circle cx="151" cy="457" r="3" fill="#dc2626"/>
+<circle cx="260" cy="404" r="3" fill="#2563eb"/>
+<circle cx="260" cy="410" r="3" fill="#dc2626"/>
+<circle cx="476" cy="254" r="3" fill="#2563eb"/>
+<circle cx="476" cy="130" r="3" fill="#dc2626"/>
+<circle cx="910" cy="143" r="3" fill="#2563eb"/>
+<circle cx="910" cy="89" r="3" fill="#dc2626"/>
+<line x1="690" y1="62" x2="714" y2="62" stroke="#2563eb" stroke-width="3"/>
+<text x="720" y="66" font-size="12" font-family="Arial">cpu_avg_pct (left)</text>
+<line x1="690" y1="82" x2="714" y2="82" stroke="#dc2626" stroke-width="3"/>
+<text x="720" y="86" font-size="12" font-family="Arial">gc_pause_ms_per_sec (right)</text>
+<text x="490" y="525" text-anchor="middle" font-size="13" font-family="Arial">beds</text>
+<text x="18" y="265" transform="rotate(-90 18 265)" text-anchor="middle" font-size="13" fill="#2563eb" font-family="Arial">CPU avg (%)</text>
+<text x="962" y="265" transform="rotate(90 962 265)" text-anchor="middle" font-size="13" fill="#dc2626" font-family="Arial">GC pause (ms/s)</text>
+</svg>
